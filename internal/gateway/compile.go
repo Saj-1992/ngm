@@ -30,6 +30,10 @@ const (
 	FileStream = "stream/ngm.conf"
 )
 
+// UDPPrefix marks a UDP bind in Output.Listens ("udp:0.0.0.0:5353"); plain
+// entries are TCP. Verification probes UDP binds differently from TCP.
+const UDPPrefix = "udp:"
+
 // CompileInput carries per-generation data.
 type CompileInput struct {
 	GenID         string
@@ -258,7 +262,11 @@ func Compile(p *Plan, issues []Issue, caps Caps, in CompileInput) (*Output, erro
 			}
 			sb.f(0, "}")
 			sb.f(0, "")
-			out.Listens = append(out.Listens, hostPort(l.Address, l.Port))
+			if l.Options.UDP {
+				out.Listens = append(out.Listens, UDPPrefix+hostPort(l.Address, l.Port))
+			} else {
+				out.Listens = append(out.Listens, hostPort(l.Address, l.Port))
+			}
 		case KindStreamTLSFront:
 			writeFront(&sb, &hb, p, caps, in, lp, httpUps, streamUps, out)
 		}

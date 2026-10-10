@@ -23,6 +23,7 @@ run p8_security node scripts/e2e/e2e_p8_sec.cjs
 run p8_origin node scripts/e2e/e2e_p8_origin.cjs
 run p8_disk node scripts/e2e/e2e_p8_disk.cjs
 run p9_decoy node scripts/e2e/e2e_p9_decoy.cjs
+run p10_features node scripts/e2e/e2e_p10_features.cjs
 run ui_qa node scripts/e2e/ui_qa.cjs
 run panel_public node scripts/ops/publish_panel.cjs
 echo DONE >> dist/e2e/summary.txt

@@ -648,6 +648,9 @@ func (c *Coordinator) runApply(r *runner) {
 	}
 	var conflicts []string
 	for _, b := range out.Listens {
+		if strings.HasPrefix(b, gateway.UDPPrefix) {
+			continue // ownership evidence (ss -t) covers TCP only; UDP binds are verified after the reload
+		}
 		if o := overlapsOther(b, obs.OtherListeners); o != "" {
 			conflicts = append(conflicts, b+" ↔ "+o)
 		}
@@ -847,6 +850,8 @@ func (c *Coordinator) verify(ctx context.Context, genID, token string, sum Summa
 	for {
 		missing = missing[:0]
 		for _, b := range sum.Listens {
+			udp := strings.HasPrefix(b, gateway.UDPPrefix)
+			b = strings.TrimPrefix(b, gateway.UDPPrefix)
 			addr := b
 			if a, p, err := splitAddrPort(b); err == nil && a.IsUnspecified() {
 				if a.Is4() {
@@ -855,7 +860,11 @@ func (c *Coordinator) verify(ctx context.Context, genID, token string, sum Summa
 					addr = "[::1]:" + strconv.Itoa(p)
 				}
 			}
-			if !c.Prober.Listening(ctx, addr) {
+			if udp {
+				if !c.Prober.ListeningUDP(ctx, addr) {
+					missing = append(missing, gateway.UDPPrefix+b)
+				}
+			} else if !c.Prober.Listening(ctx, addr) {
 				missing = append(missing, b)
 			}
 		}

@@ -185,7 +185,8 @@ func (p *fakeProber) Probe(_ context.Context, pr gateway.Probe, _, wantGen, _ st
 	}
 	return ProbeResult{Probe: pr, OK: true, Generation: wantGen}
 }
-func (p *fakeProber) Listening(context.Context, string) bool { return true }
+func (p *fakeProber) Listening(context.Context, string) bool    { return true }
+func (p *fakeProber) ListeningUDP(context.Context, string) bool { return true }
 
 type env struct {
 	c  *Coordinator
@@ -325,6 +326,9 @@ func (f *failNew) Probe(ctx context.Context, p gateway.Probe, tok, want, fp stri
 	return f.orig.Probe(ctx, p, tok, want, fp)
 }
 func (f *failNew) Listening(context.Context, string) bool { return true }
+func (f *failNew) ListeningUDP(ctx context.Context, a string) bool {
+	return f.orig.ListeningUDP(ctx, a)
+}
 
 func TestNginxTestAndReloadFailures(t *testing.T) {
 	e := newEnv(t)
@@ -519,7 +523,8 @@ func (h proberHook) Probe(ctx context.Context, pr gateway.Probe, tok, wantGen, f
 	}
 	return h.p.Probe(ctx, pr, tok, wantGen, fp)
 }
-func (h proberHook) Listening(ctx context.Context, a string) bool { return true }
+func (h proberHook) Listening(ctx context.Context, a string) bool    { return true }
+func (h proberHook) ListeningUDP(ctx context.Context, a string) bool { return true }
 
 // submitNoState submits an apply while nginx.state is failing: preflight must
 // see the state, so let the first call succeed by toggling downStates around it.

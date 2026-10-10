@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,6 +28,8 @@ type ProbeResult struct {
 type Prober interface {
 	Probe(ctx context.Context, p gateway.Probe, token, wantGen, wantCertFP string) ProbeResult
 	Listening(ctx context.Context, addr string) bool
+	// ListeningUDP reports whether something is bound to the UDP address.
+	ListeningUDP(ctx context.Context, addr string) bool
 }
 
 // NetProber is the real implementation.
@@ -88,4 +91,30 @@ func (NetProber) Listening(ctx context.Context, addr string) bool {
 	}
 	c.Close()
 	return true
+}
+
+// ListeningUDP reports whether a UDP socket is bound at addr. UDP has no
+// handshake, so it sends one empty datagram on a connected socket: if nothing
+// listens, the kernel answers with ICMP port unreachable and the following read
+// fails with ECONNREFUSED. A read timeout (no ICMP) means a socket is bound.
+func (NetProber) ListeningUDP(ctx context.Context, addr string) bool {
+	c, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "udp", addr)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(700 * time.Millisecond))
+	if _, err := c.Write([]byte{0}); err != nil {
+		return false
+	}
+	buf := make([]byte, 16)
+	_, err = c.Read(buf)
+	if err == nil {
+		return true // got a reply: definitely listening
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true // no ICMP unreachable within the window: bound
+	}
+	return false // connection refused (ICMP port unreachable) or other failure
 }
