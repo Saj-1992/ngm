@@ -110,6 +110,25 @@ async function request<T>(path: string, o: Opts = {}): Promise<T> {
   return body as T;
 }
 
+// downloadFile fetches a non-JSON attachment and saves it, honouring the
+// step-up flow (a 403 step_up_required prompts for 2FA then retries once).
+export async function downloadFile(path: string, filename: string, retried = false): Promise<void> {
+  const res = await fetch(apiUrl(path), { credentials: "same-origin", headers: { Accept: "application/x-pem-file" } });
+  if (!res.ok) {
+    let code = "http_" + res.status, message = res.statusText;
+    try { const j = await res.clone().json(); code = j?.error?.code ?? code; message = j?.error?.message ?? message; } catch { /* non-JSON */ }
+    if (code === "step_up_required" && !retried && stepUpHandler) {
+      if (await stepUpHandler()) return downloadFile(path, filename, true);
+    }
+    throw new ApiError(res.status, code, message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+
 const q = (p: Record<string, string | number | null | undefined>) => {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(p)) if (v !== undefined && v !== null && v !== "") s.set(k, String(v));

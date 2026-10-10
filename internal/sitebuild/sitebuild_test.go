@@ -128,7 +128,7 @@ func TestBlogOrderingAndDocsSidebar(t *testing.T) {
 	c.Pages = append(c.Pages, Page{Slug: "newer", Kind: "post", Date: "2026-06-01", Title: L{"fa": "تازه", "en": "Newer"}})
 	out := build(t, c, "blog", nil)
 	h := string(out.Files["en/index.html"])
-	if strings.Index(h, "Newer") > strings.Index(h, "Hello world") || strings.Index(h, "Newer") < 0 {
+	if strings.Index(h, "Newer") > strings.Index(h, "Reading the logs") || strings.Index(h, "Newer") < 0 {
 		t.Fatal("posts must be newest first")
 	}
 	d := build(t, Starter("documentation"), "documentation", nil)

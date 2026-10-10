@@ -140,7 +140,7 @@ func Build(in Input) (*Output, error) {
 		out.Files["sitemap.xml"] = []byte(sitemap(base, locs, pages))
 	}
 	out.Files["robots.txt"] = []byte(robots)
-	out.Files["404.html"] = []byte("<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>404</title></head><body><main><h1>404</h1></main></body></html>\n")
+	out.Files["404.html"] = []byte(notFoundPage(c, in, accent))
 	out.Hash, out.Size = HashFiles(out.Files)
 	return out, nil
 }
@@ -450,4 +450,27 @@ section{margin-block:28px}.hero{padding-block:32px}.hero p{font-size:1.15rem;col
 		"app_showcase":  ".t-app_showcase .hero{display:grid;gap:24px;align-items:center}.t-app_showcase .hero img{max-height:520px;width:auto;justify-self:center}",
 	}[template]
 	return base + extra + "\n"
+}
+
+// notFoundPage renders a self-contained, styled 404 page. It uses inline CSS
+// and a root-absolute home link so it displays correctly no matter which path
+// Nginx serves it for (error_page keeps the original request URI).
+func notFoundPage(c *Content, in Input, accent string) string {
+	loc, def := in.Default, in.Default
+	dir := Locales[loc]
+	title := L(c.Site.Title).mustGet(loc, def)
+	heading, _ := L{"en": "Page not found", "fa": "صفحه پیدا نشد", "ar": "الصفحة غير موجودة", "de": "Seite nicht gefunden", "fr": "Page introuvable", "es": "Página no encontrada", "tr": "Sayfa bulunamadı"}.Get(loc, "en")
+	msg, _ := L{"en": "The page you are looking for does not exist or has moved.", "fa": "صفحه‌ای که دنبالش هستید وجود ندارد یا جابه‌جا شده است.", "ar": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.", "de": "Die gesuchte Seite existiert nicht oder wurde verschoben.", "fr": "La page que vous cherchez n'existe pas ou a été déplacée.", "es": "La página que buscas no existe o se ha movido.", "tr": "Aradığınız sayfa yok veya taşınmış."}.Get(loc, "en")
+	home, _ := L{"en": "Go to homepage", "fa": "رفتن به خانه", "ar": "الذهاب إلى الصفحة الرئيسية", "de": "Zur Startseite", "fr": "Aller à l'accueil", "es": "Ir al inicio", "tr": "Ana sayfaya git"}.Get(loc, "en")
+	var b strings.Builder
+	fmt.Fprintf(&b, "<!doctype html>\n<html lang=\"%s\" dir=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n", loc, dir)
+	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"robots\" content=\"noindex\">\n")
+	fmt.Fprintf(&b, "<title>404 — %s</title>\n", esc(title))
+	fmt.Fprintf(&b, "<style>:root{--a:%s}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#1b1d21;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,'Vazirmatn',sans-serif;padding:24px}main{max-width:32rem;text-align:center}.code{font-size:clamp(4rem,18vw,8rem);font-weight:800;line-height:1;color:var(--a);letter-spacing:-.04em}h1{font-size:1.5rem;margin:.5rem 0}p{color:#5b6068;margin:0 0 1.5rem}a.btn{display:inline-block;background:var(--a);color:#fff;text-decoration:none;padding:.65rem 1.25rem;border-radius:.6rem;font-weight:600}a.btn:hover{filter:brightness(.95)}.site{margin-top:2rem;color:#8a9099;font-size:.85rem}@media(prefers-color-scheme:dark){body{background:#0f1115;color:#e9ebef}p{color:#9aa0a8}}</style>\n", accent)
+	b.WriteString("</head>\n<body>\n<main>\n")
+	fmt.Fprintf(&b, "<div class=\"code\">404</div>\n<h1>%s</h1>\n<p>%s</p>\n", esc(heading), esc(msg))
+	fmt.Fprintf(&b, "<a class=\"btn\" href=\"/\">%s</a>\n", esc(home))
+	fmt.Fprintf(&b, "<div class=\"site\">%s</div>\n", esc(title))
+	b.WriteString("</main>\n</body>\n</html>\n")
+	return b.String()
 }

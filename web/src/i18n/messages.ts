@@ -867,6 +867,8 @@ export const en = {
   "issue.stream_multiple_routes": "Only one route per plain stream listener",
   "issue.domain_not_registered": "Name is not in the domain registry",
   "issue.nginx_unknown": "Nginx state is unknown",
+  "ssl.dlChain": "Download certificate (fullchain.pem)",
+  "ssl.dlKey": "Download private key (privkey.pem)",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1740,4 +1742,6 @@ export const fa: Record<MessageKey, string> = {
   "issue.stream_multiple_routes": "برای هر شنوندهٔ stream ساده فقط یک مسیر مجاز است",
   "issue.domain_not_registered": "نام در فهرست دامنه‌ها ثبت نشده است",
   "issue.nginx_unknown": "وضعیت Nginx نامشخص است",
+  "ssl.dlChain": "دانلود گواهی (fullchain.pem)",
+  "ssl.dlKey": "دانلود کلید خصوصی (privkey.pem)",
 };

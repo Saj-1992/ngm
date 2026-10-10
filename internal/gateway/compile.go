@@ -65,6 +65,8 @@ func writeFallbackSite(x *w, in CompileInput) {
 	x.f(1, "index index.html;")
 	x.f(1, "charset utf-8;")
 	x.f(1, "autoindex off;")
+	x.f(1, "error_page 404 /404.html;")
+	x.f(1, "location = /404.html { internal; }")
 	x.f(1, "location / { try_files $uri $uri/ =404; }")
 	x.f(1, "add_header X-Content-Type-Options nosniff always;")
 	x.f(1, "add_header Referrer-Policy strict-origin-when-cross-origin always;")
@@ -566,6 +568,7 @@ func writeWebsite(x *w, r *Route, path string) {
 	if path == "/" {
 		x.f(2, "root %s;", SiteRoot(r.DestID))
 		x.f(2, "try_files $uri $uri/ =404;")
+		x.f(2, "error_page 404 /404.html;")
 	} else {
 		x.f(2, "alias %s/;", SiteRoot(r.DestID))
 	}

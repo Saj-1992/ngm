@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ngm-gateway/ngm/internal/apierr"
+	"github.com/ngm-gateway/ngm/internal/auth"
 	"github.com/ngm-gateway/ngm/internal/deployspec"
 	"github.com/ngm-gateway/ngm/internal/gateway"
 	"github.com/ngm-gateway/ngm/internal/gwstore"
@@ -51,6 +52,8 @@ func (s *Server) registerGatewayRoutes() {
 	s.handle("POST", "/api/v1/certificates", "certificates.write", s.importCert)
 	s.handle("POST", "/api/v1/certificates/self-signed", "certificates.write", s.selfSignedCert)
 	s.handle("GET", "/api/v1/certificates/{id}", "certificates.read", s.getCert)
+	s.handle("GET", "/api/v1/certificates/{id}/fullchain", "certificates.read", s.downloadFullchain)
+	s.handle("GET", "/api/v1/certificates/{id}/privkey", "certificates.write", s.downloadPrivkey)
 	s.handle("DELETE", "/api/v1/certificates/{id}", "certificates.write", s.deleteCert)
 	s.handle("POST", "/api/v1/certificates/acme", "certificates.write", s.acmeCertificate)
 	s.handle("POST", "/api/v1/certificates/{id}/renew", "certificates.write", s.renewCertificate)
@@ -429,6 +432,76 @@ func (s *Server) getCert(w http.ResponseWriter, r *http.Request) error {
 		return mapGWError(err)
 	}
 	return writeEntity(w, http.StatusOK, c.Revision, c)
+}
+
+// downloadFullchain serves the certificate + chain as fullchain.pem (public
+// material; certificates.read).
+func (s *Server) downloadFullchain(w http.ResponseWriter, r *http.Request) error {
+	id, err := validID(r)
+	if err != nil {
+		return err
+	}
+	c, err := s.d.GW.GetCertificate(r.Context(), id)
+	if err != nil {
+		return mapGWError(err)
+	}
+	mat, err := s.d.GW.CertMaterial(r.Context(), []string{id})
+	if err != nil {
+		return err
+	}
+	defer mat.Clear()
+	chain := mat.Chains[id]
+	if chain == "" {
+		return apierr.NotFound("certificate material")
+	}
+	_, _ = s.d.Audit.Record(r.Context(), auditEvent(r, "certificate.download_fullchain", "certificate", id, map[string]any{"name": c.Name}))
+	servePEM(w, "fullchain.pem", []byte(chain))
+	return nil
+}
+
+// downloadPrivkey serves the private key as privkey.pem. This is the only
+// path by which a key leaves the vault: it requires an interactive user (never
+// an API token) with a fresh second factor, and every download is audited.
+func (s *Server) downloadPrivkey(w http.ResponseWriter, r *http.Request) error {
+	id, err := validID(r)
+	if err != nil {
+		return err
+	}
+	p := PrincipalFrom(r.Context())
+	if p.Kind != "user" {
+		return apierr.New(http.StatusForbidden, "user_required", "private keys can only be downloaded by an interactive user, not an API token")
+	}
+	if !p.StepUpFresh(time.Now()) {
+		return apierr.New(http.StatusForbidden, "step_up_required", "recent two-factor verification required").
+			WithDetails(map[string]any{"window_seconds": int(auth.StepUpWindow.Seconds())})
+	}
+	c, err := s.d.GW.GetCertificate(r.Context(), id)
+	if err != nil {
+		return mapGWError(err)
+	}
+	mat, err := s.d.GW.CertMaterial(r.Context(), []string{id})
+	if err != nil {
+		return err
+	}
+	defer mat.Clear()
+	kf := mat.KeyFile[id]
+	key := mat.Keys[kf]
+	if len(key) == 0 {
+		return apierr.NotFound("private key")
+	}
+	_, _ = s.d.Audit.Record(r.Context(), auditEvent(r, "certificate.download_privkey", "certificate", id, map[string]any{"name": c.Name}))
+	servePEM(w, "privkey.pem", key)
+	return nil
+}
+
+// servePEM writes PEM bytes as a download, never cached.
+func servePEM(w http.ResponseWriter, filename string, pem []byte) {
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pem)
 }
 
 type certIn struct {

@@ -6010,6 +6010,64 @@
           }
         }
       }
+    },
+    "/api/v1/certificates/{id}/fullchain": {
+      "get": {
+        "operationId": "downloadFullchain",
+        "x-ngm-permission": "certificates.read",
+        "summary": "Download the certificate + chain as fullchain.pem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM file",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/certificates/{id}/privkey": {
+      "get": {
+        "operationId": "downloadPrivkey",
+        "x-ngm-permission": "certificates.write",
+        "summary": "Download the private key as privkey.pem (interactive user + fresh MFA; audited)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM file",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

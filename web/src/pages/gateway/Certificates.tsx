@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/States";
 import { Field, FormError, Input, Modal, Textarea } from "@/components/ui/form";
 import { Button, Card, Ltr, PageHeader } from "@/components/ui/primitives";
 import { useI18n } from "@/i18n/i18n";
-import { gw, web, type Certificate } from "@/lib/api";
+import { gw, web, type Certificate, downloadFile } from "@/lib/api";
 import { Select } from "@/components/ui/form";
 import { JobProgress } from "./Deployments";
 import { useAsync } from "@/lib/hooks";
@@ -64,7 +64,7 @@ export function CertificatesPage() {
                     <td className={tdCls}><Ltr className="text-xs">{c.sans.join(", ")}</Ltr></td>
                     <td className={`${tdCls} text-xs`}>{formatDateTime(c.not_after)}</td>
                     <td className={tdCls}><Ltr className="text-[11px] text-fg-muted">{c.fingerprint_sha256.slice(0, 23)}…</Ltr></td>
-                    <td className={`${tdCls} text-end`}>{writable && <RowMenu label={`${t("common.delete")} ${c.name}`} items={[...(c.source === "acme" ? [{ label: t("ssl.renew"), onSelect: async () => {
+                    <td className={`${tdCls} text-end`}>{writable && <RowMenu label={`${t("common.delete")} ${c.name}`} items={[{ label: t("ssl.dlChain"), onSelect: async () => { try { await downloadFile(`/api/v1/certificates/${c.id}/fullchain`, `${c.name}-fullchain.pem`); } catch (e) { setErr(errText(e)); } } }, ...(c.has_key ? [{ label: t("ssl.dlKey"), danger: true, onSelect: async () => { try { await downloadFile(`/api/v1/certificates/${c.id}/privkey`, `${c.name}-privkey.pem`); } catch (e) { setErr(errText(e)); } } }] : []), ...(c.source === "acme" ? [{ label: t("ssl.renew"), onSelect: async () => {
                       try { setJob((await web.renew(c.id, actionKey())).job_id); } catch (e) { setErr(errText(e)); }
                     } }] : []), { label: t("common.delete"), danger: true, onSelect: async () => {
                       if (!(await confirmDialog(t("common.confirmDelete", { name: c.name }), { typed: c.name }))) return;
