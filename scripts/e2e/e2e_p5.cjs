@@ -65,6 +65,29 @@ async function findCert(name) {
   return ((await api("GET", "/api/v1/certificates")).body.items || []).find((c) => c.name === name);
 }
 
+async function ensureVerifyRoute(certId) {
+  const ls = (await api("GET", "/api/v1/listeners")).body.items;
+  const front = ls.find((l) => l.kind === "stream_tls_front" && l.port === 443) ||
+    (await api("POST", "/api/v1/listeners", { name: "front443", kind: "stream_tls_front", address: "0.0.0.0", port: 443 })).body;
+  let be = (await api("GET", "/api/v1/backends")).body.items.find((b) => b.name === "acme-verify-be");
+  if (!be) be = (await api("POST", "/api/v1/backends", { name: "acme-verify-be", host: "127.0.0.1", port: 9, transport: "http" })).body;
+  const routes = (await api("GET", "/api/v1/routes")).body.items;
+  const rt = routes.find((r) => r.name === "acme-verify");
+  const want = { name: "acme-verify", listener_id: front.id, protocol: "tls_terminate_http", destination_kind: "endpoint", destination_id: be.id, certificate_id: certId, matches: [{ field: "sni", operator: "exact", value: DOMAIN }] };
+  if (!rt) { const c = await api("POST", "/api/v1/routes", want); if (c.status !== 201) throw new Error("acme-verify " + c.status + " " + JSON.stringify(c.body).slice(0,200)); }
+  else { const cur = (await api("GET", "/api/v1/routes/" + rt.id)).body; const upd = { ...cur, ...want }; delete upd.id; delete upd.revision; await api("PUT", "/api/v1/routes/" + rt.id, upd, { "If-Match": `"r${cur.revision}"` }); }
+  const d = await api("POST", "/api/v1/deployments", {}, { "Idempotency-Key": "acme-verify-" + Date.now() });
+  return waitJob(d.body.job_id, 180000);
+}
+async function removeVerifyRoute() {
+  for (const [p, n] of [["/api/v1/routes", "acme-verify"], ["/api/v1/backends", "acme-verify-be"]]) {
+    const it = (await api("GET", p)).body.items.find((x) => x.name === n);
+    if (it) await api("DELETE", p + "/" + it.id, undefined, { "If-Match": `"r${it.revision}"` });
+  }
+  const d = await api("POST", "/api/v1/deployments", {}, { "Idempotency-Key": "acme-verify-rm-" + Date.now() });
+  await waitJob(d.body.job_id, 180000);
+}
+
 async function acmeTests() {
   const name = "e2e-acme-staging";
   let cert = await findCert(name);
@@ -79,17 +102,8 @@ async function acmeTests() {
     cert ? `issuer "${cert.issuer}", SANs ${cert.sans}, expires ${cert.not_after}` : "missing");
   const left = (await sh("ls -A /etc/nginx/ngm/acme 2>/dev/null | wc -l")).out;
   check("acme-challenges-cleared", left === "0", "challenge files left: " + left);
-  // Attach to the shared-443 terminate route and deploy.
-  const routes = (await api("GET", "/api/v1/routes")).body.items;
-  const panel = routes.find((r) => r.protocol === "tls_terminate_http" && r.matches.some((m) => m.value === DOMAIN));
-  if (panel && panel.certificate_id !== cert.id) {
-    const upd = { ...panel, certificate_id: cert.id };
-    delete upd.id; delete upd.revision;
-    const r = await api("PUT", "/api/v1/routes/" + panel.id, upd, { "If-Match": `"r${panel.revision}"` });
-    if (r.status !== 200) throw new Error("route update " + r.status + JSON.stringify(r.body));
-  }
-  const r = await api("POST", "/api/v1/deployments", {}, { "Idempotency-Key": "e2e-acme-deploy-" + Date.now() });
-  const j = await waitJob(r.body.job_id, 180000);
+  // Serve-check on an isolated :443 route (never the panel).
+  const j = await ensureVerifyRoute(cert.id);
   const pc = await peerCert(VMIP, DOMAIN);
   check("acme-served", ["Succeeded", "Blocked"].includes(j.state) && /STAGING|Staging|Fake/i.test(pc.issuer || "") && pc.fp,
     `deploy ${j.state} ${j.error ? JSON.stringify(j.error).slice(0, 120) : ""}; served issuer "${pc.issuer}" valid_to ${pc.valid_to}`);
@@ -127,25 +141,13 @@ async function renewTests() {
 }
 
 H.start(async () => {
-  // The apex is the only name with public DNS, so the ACME tests attach their
-  // staging certificate to the apex TLS route. When that route is the published
-  // Control Center, its production certificate is put back afterwards.
-  const pub = (await api("GET", "/api/v1/routes")).body.items.find((r) => r.name === "ngm-panel-public");
+  // ACME serve-checks use a dedicated isolated :443 route (acme-verify), never
+  // the Control Center panel route, so an interruption cannot break the panel.
   try {
     if (ONLY.includes("dns")) await dnsTests();
     if (ONLY.includes("acme")) await acmeTests();
     if (ONLY.includes("renew")) await renewTests();
   } finally {
-    if (pub) {
-      const cur = (await api("GET", "/api/v1/routes/" + pub.id)).body;
-      if (cur.certificate_id !== pub.certificate_id) {
-        const upd = { ...cur, certificate_id: pub.certificate_id };
-        delete upd.id; delete upd.revision;
-        await api("PUT", "/api/v1/routes/" + pub.id, upd, { "If-Match": `"r${cur.revision}"` });
-        const r = await api("POST", "/api/v1/deployments", {}, { "Idempotency-Key": "e2e-acme-restore-" + Date.now() });
-        const j = await waitJob(r.body.job_id, 180000);
-        check("panel-certificate-restored", j.state === "Succeeded", "published panel back on its production certificate: " + j.state);
-      }
-    }
+    await removeVerifyRoute().catch(() => {});
   }
 });
