@@ -16,6 +16,21 @@ the next session continues from **Next steps**, the first unchecked item. Do not
   - Make every unknown or probing visitor see a real-looking website (no routing fingerprint), to avoid abuse flags from crawlers and scanners (Cloudflare, Hetzner, firewalls).
 
 ## Next steps
+### Master-prompt work 2026-10-11 (state)
+- [x] Panel on secret port/path :9443, apex = decoy everywhere (ADR-037); live + browser verified.
+- [x] Rich bilingual starter content for 6 templates + custom 404; live 17/17 (scripts/e2e/e2e_p10_features.cjs).
+- [x] Certificate fullchain/privkey download (step-up, audited, token refused); UI buttons.
+- [x] UDP L4 forwarding (+ Safe Apply UDP verification bug fixed); live round trip.
+- [x] ACME DNS-01 via Cloudflare + zone discovery + TXT helpers + label generator (unit-tested with fakes; NOT live: no Cloudflare token).
+- [x] ADR-037..040, CHANGELOG.md, crawler-classification limits in SECURITY_MODEL. Pushed to GitHub main (normal push, no force).
+- [ ] Full E2E on 0.8.1-rc.6 (running: sh scripts/e2e/run_all.sh; summary in dist/e2e/summary.txt). Then record in TEST_REPORT.
+- [ ] CI result for commit 6dff9db on GitHub.
+- [ ] Remaining gaps vs the master prompt (do next, in order):
+  1. Cloudflare UI: token/zone list/subdomain create (auto/manual naming, proxy, TTL) page; /domains/{id}/cloudflare already previews/applies DNS.
+  2. Backend health checks UI per route + routing logs view (check what already exists first).
+  3. Update PROGRESS/TEST_REPORT/README; release 0.8.1 (tag + GitHub release with signed assets; one-link install must keep working).
+  4. Final concise report to the owner (in Persian).
+
 ### Owner requirements 2026-10-10 (do in order)
 - [x] R1 DONE (live): panel at https://<domain>:9443/<secret>/ only. api.public_path config, API prefix-strip + <base> injection, SPA base-aware (base.ts), managementOnly accepts host+path route, set-origin takes port+path. Verified in a real browser. The panel at https://<domain>:9443/<secret-path>/ only: API/SPA served under a base path (config api.public_path); managementOnly accepts a host + path_prefix route on an https listener; set-origin with port+path.
 - [x] R2 DONE (live): apex on 80/443/9443 = decoy site (global fallback + compiler catch-all location / in named vhosts). Verified. The apex <domain> on ANY port/request shows the fallback website (80 and 443 = fallback site with the panel-prod cert; 9443 outside the secret path = fallback site). Move the test routes off the apex: the gateway suite uses t.<domain> via Host/--resolve; the ACME test verifies on a private 127.0.0.1 listener.
