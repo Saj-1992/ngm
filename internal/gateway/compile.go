@@ -241,9 +241,13 @@ func Compile(p *Plan, issues []Issue, caps Caps, in CompileInput) (*Output, erro
 				continue
 			}
 			r := lp.StreamRoute
-			sb.f(0, "# listener %q, route %q", l.Name, r.Name)
+			udp := ""
+			if l.Options.UDP {
+				udp = " udp"
+			}
+			sb.f(0, "# listener %q (%s), route %q", l.Name, map[bool]string{true: "udp", false: "tcp"}[l.Options.UDP], r.Name)
 			sb.f(0, "server {")
-			sb.f(1, "listen %s;", hostPort(l.Address, l.Port))
+			sb.f(1, "listen %s%s;", hostPort(l.Address, l.Port), udp)
 			writeServerLogs(&sb, true)
 			if r.DestKind == DestReject {
 				sb.f(1, "return \"\";")

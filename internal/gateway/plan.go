@@ -171,6 +171,7 @@ func validateListeners(c *checker, m *Model, caps Caps, o BuildOptions) {
 	type bind struct {
 		addr   netip.Addr
 		module string
+		l4     string // tcp | udp (a tcp and a udp listener may share a port)
 		l      *Listener
 	}
 	byPort := map[int][]bind{}
@@ -226,11 +227,18 @@ func validateListeners(c *checker, m *Model, caps Caps, o BuildOptions) {
 		if l.Options.HTTP2 && (l.Kind != KindHTTPS || !caps.HTTP2) {
 			c.err(l.ID, "cap_http2", "HTTP/2 needs an https listener and an Nginx build with http_v2")
 		}
+		if l.Options.UDP && l.Kind != KindStream {
+			c.err(l.ID, "listener_udp", "UDP is only available on a stream listener")
+		}
 		mod := "http"
 		if !isHTTPModule(l.Kind) {
 			mod = "stream"
 		}
-		byPort[l.Port] = append(byPort[l.Port], bind{a, mod, l})
+		l4 := "tcp"
+		if l.Kind == KindStream && l.Options.UDP {
+			l4 = "udp"
+		}
+		byPort[l.Port] = append(byPort[l.Port], bind{a, mod, l4, l})
 	}
 	ports := make([]int, 0, len(byPort))
 	for p := range byPort {
@@ -244,6 +252,9 @@ func validateListeners(c *checker, m *Model, caps Caps, o BuildOptions) {
 				a, b := bs[i], bs[j]
 				if a.addr.Is4() != b.addr.Is4() {
 					continue // Nginx binds IPv6 with ipv6only=on by default
+				}
+				if a.l4 != b.l4 {
+					continue // a TCP and a UDP listener can share the same port
 				}
 				overlap := a.addr == b.addr || a.addr.IsUnspecified() || b.addr.IsUnspecified()
 				if overlap && a.module != b.module {

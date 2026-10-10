@@ -22,13 +22,14 @@ function ListenerForm({ initial, onClose, onDone }: { initial?: Listener; onClos
     port: initial?.port ?? 80,
     enabled: initial?.enabled ?? true,
     http2: initial?.options.http2 ?? false,
+    udp: initial?.options.udp ?? false,
   });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     setErr(null);
-    const body = { name: f.name, kind: f.kind, address: f.address.trim(), port: Number(f.port), enabled: f.enabled, options: { http2: f.kind === "https" && f.http2 } };
+    const body = { name: f.name, kind: f.kind, address: f.address.trim(), port: Number(f.port), enabled: f.enabled, options: { http2: f.kind === "https" && f.http2, udp: f.kind === "stream" && f.udp } };
     try {
       if (initial) await gw.listeners.update(initial, body);
       else await gw.listeners.create(body);
@@ -68,6 +69,7 @@ function ListenerForm({ initial, onClose, onDone }: { initial?: Listener; onClos
           <Field label={t("gw.port")}>{({ id }) => <Input id={id} dir="ltr" type="number" min={1} max={65535} value={f.port} onChange={(e) => setF({ ...f, port: Number(e.target.value) })} />}</Field>
         </div>
         {f.kind === "https" && <Check checked={f.http2} onChange={(v) => setF({ ...f, http2: v })} label={t("gw.http2")} />}
+        {f.kind === "stream" && <Check checked={f.udp} onChange={(v) => setF({ ...f, udp: v })} label={t("gw.udp")} hint={t("gw.udpHint")} />}
         <Check checked={f.enabled} onChange={(v) => setF({ ...f, enabled: v })} label={t("common.enabled")} />
         <FormError>{err}</FormError>
       </form>

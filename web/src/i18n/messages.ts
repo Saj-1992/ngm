@@ -869,6 +869,8 @@ export const en = {
   "issue.nginx_unknown": "Nginx state is unknown",
   "ssl.dlChain": "Download certificate (fullchain.pem)",
   "ssl.dlKey": "Download private key (privkey.pem)",
+  "gw.udp": "UDP (Layer 4)",
+  "gw.udpHint": "Forward UDP datagrams instead of TCP. A UDP and a TCP listener may share the same port.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1744,4 +1746,6 @@ export const fa: Record<MessageKey, string> = {
   "issue.nginx_unknown": "وضعیت Nginx نامشخص است",
   "ssl.dlChain": "دانلود گواهی (fullchain.pem)",
   "ssl.dlKey": "دانلود کلید خصوصی (privkey.pem)",
+  "gw.udp": "UDP (لایهٔ ۴)",
+  "gw.udpHint": "به‌جای TCP، بسته‌های UDP را هدایت می‌کند. یک listener UDP و TCP می‌توانند یک پورت را مشترک داشته باشند.",
 };

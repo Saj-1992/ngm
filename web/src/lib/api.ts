@@ -183,7 +183,7 @@ export const api = {
 // ─── Gateway (Phase 3) ─────────────────────────────────────────────────────
 
 export type ListenerKind = "http" | "https" | "stream" | "stream_tls_front";
-export type Listener = { id: string; name: string; kind: ListenerKind; address: string; port: number; family: string; enabled: boolean; options: { http2?: boolean }; revision: number };
+export type Listener = { id: string; name: string; kind: ListenerKind; address: string; port: number; family: string; enabled: boolean; options: { http2?: boolean; udp?: boolean }; revision: number };
 export type Transport = "http" | "https" | "tcp";
 export type Endpoint = {
   id: string; name: string; host: string; port: number; transport: Transport; tls_verify: boolean; tls_server_name?: string; weight: number;

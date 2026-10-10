@@ -53,6 +53,9 @@ const (
 // ListenerOptions are per-listener knobs.
 type ListenerOptions struct {
 	HTTP2 bool `json:"http2,omitempty"` // https listeners; requires capability
+	// UDP makes a "stream" listener forward UDP datagrams instead of TCP
+	// (Layer 4). A UDP and a TCP listener may share the same port.
+	UDP bool `json:"udp,omitempty"`
 }
 
 // Listener is a bind point.

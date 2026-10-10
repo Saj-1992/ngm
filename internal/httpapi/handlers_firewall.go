@@ -113,18 +113,26 @@ func (s *Server) fwFromListeners(w http.ResponseWriter, r *http.Request) error {
 		have[e.Key] = true
 	}
 	created := []string{}
-	seen := map[int]bool{}
+	seen := map[string]bool{}
 	for _, l := range ls {
 		a, _ := netip.ParseAddr(l.Address)
-		if !l.Enabled || a.IsLoopback() || seen[l.Port] {
+		proto := "tcp"
+		if l.Options.UDP {
+			proto = "udp"
+		}
+		sk := proto + ":" + strconv.Itoa(l.Port)
+		if !l.Enabled || a.IsLoopback() || seen[sk] {
 			continue
 		}
-		seen[l.Port] = true
+		seen[sk] = true
 		key := "listener-" + strconv.Itoa(l.Port)
+		if proto == "udp" {
+			key = "listener-udp-" + strconv.Itoa(l.Port)
+		}
 		if have[key] {
 			continue
 		}
-		if _, err := s.fw().Create(r.Context(), PrincipalFrom(r.Context()), fwstore.Rule{Key: key, Action: "allow", Proto: "tcp", Port: l.Port, Source: "any"}); err != nil {
+		if _, err := s.fw().Create(r.Context(), PrincipalFrom(r.Context()), fwstore.Rule{Key: key, Action: "allow", Proto: proto, Port: l.Port, Source: "any"}); err != nil {
 			return mapFWError(err)
 		}
 		created = append(created, key)
