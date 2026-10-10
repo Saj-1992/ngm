@@ -103,3 +103,13 @@ Provider firewalls are out of scope. External SSH reachability cannot be proven 
   - Only a development signing key exists (O-24).
   - Dependency vulnerability scanning could not reach vuln.go.dev or OSV from the development network. It runs in CI (`security` job) once a remote exists.
   - No third-party penetration test.
+
+## Crawlers, scanners and what NGM can and cannot tell
+NGM serves every request that matches no route with a complete fallback website, the same answer for everyone (ADR-036). It deliberately does **not** try to classify visitors. This is why:
+
+- **User-Agent and headers are trivially spoofed.** Any client can claim to be a search engine, a Cloudflare health check or a hosting-provider monitor. Branching on them would be unreliable and would add behaviour that differs between visitors, which is itself a fingerprint. NGM does not do it.
+- **Behind Cloudflare (proxied records) the TCP peer is Cloudflare.** The real client address arrives only in `CF-Connecting-IP` / `X-Forwarded-For`, and those headers are trustworthy only when the connection really comes from Cloudflare's published ranges. NGM does not read them for decisions. Cloudflare's own crawlers, health checks and the visitors it proxies all look like Cloudflare to the origin.
+- **Source address is the only non-spoofable signal at the origin**, and address ranges of providers (Cloudflare, hosting monitors, search engines) change and are shared by unrelated customers. Reverse-DNS checks help for some search engines but are not available for most scanners.
+- **TLS behaviour is consistent by design.** Unknown or missing SNI on the shared port, direct IP access and unknown hosts all complete a normal handshake with the same certificate and receive the same website, so a scanner cannot tell a routed host from an unrouted one by a closed connection or a TLS alert.
+- **What is still observable:** a scanner that knows a real backend's SNI reaches that backend (for TLS passthrough, NGM sees only the ClientHello and cannot inspect or change the traffic). Timing, traffic volume and the open ports themselves are visible. Hosting providers judge more than a web page, and NGM cannot change their policy or detection.
+- **Practical guidance:** keep realistic content on the fallback site, use a certificate for a real domain, keep the admin path secret and rate-limited, and rely on authentication (not obscurity) for protection.

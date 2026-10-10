@@ -227,3 +227,29 @@ NGM does not block external upgrades (for example unattended-upgrades). The moni
   - It does not hide traffic volume or timing, and it does not defeat active probing of a passthrough backend reached through a known SNI.
   - It does not change a provider's terms of service.
   - The fallback site should look genuine: real content, and a certificate for a real domain, not self-signed.
+
+## ADR-037: Control Center on a secret port and path (2026-10-10, Accepted)
+- **Context:** the apex domain must look like an ordinary website on every port and path. The management panel must therefore not live at a guessable URL.
+- **Decision:** the panel is published at `https://<domain>:<port>/<secret-path>/` (default port 9443). Config `api.public_origin` carries the host and port, and `api.public_path` carries the secret base path (random, 18 hex characters, kept only in the local, git-ignored `.local/panel-path.txt` and in `/etc/ngm/ngm.json`).
+- **Mechanism:**
+  - The API strips the prefix (`withBasePath`) and injects `<base href>` into the SPA shell. The SPA derives its base (`lib/base.ts`) for fetch, SSE, downloads and the router. The same binary still answers at the root for the SSH tunnel.
+  - A TLS-terminate route with SNI = host and `path_prefix = /<secret>/` may target the control API. This is the only exception to the "never expose the API" validation, and it applies only when the route matches exactly the configured host and path.
+  - `base-uri` in the CSP changed from `'none'` to `'self'` (same-origin only) because of the `<base>` tag.
+- **Everything else on that host answers with the fallback website** (ADR-036), including `:9443` outside the secret path. Unknown paths on a configured vhost fall through to the fallback site instead of a bare 404.
+- **Limits (explicit):** a secret path is obscurity, not authentication. Authentication (password, MFA, CSRF, rate limiting) still protects every operation. The path appears in browser history and in the TLS-terminated access log.
+
+## ADR-038: UDP is a flag on a stream listener (2026-10-10, Accepted)
+- **Decision:** `options.udp` on a `stream` listener renders `listen <addr:port> udp;`. A TCP and a UDP listener may share a port. It needs no schema migration.
+- **Verification:** UDP binds are labelled `udp:<addr>` in the generation's listen list. The TCP ownership check (`ss -t`) skips them, and the post-reload check probes UDP separately: one datagram on a connected socket, where ICMP port-unreachable (ECONNREFUSED) means "not bound" and a read timeout means "bound". This is verified on Linux only. Windows does not deliver that ICMP error to the program.
+- **Limits:** UDP has no TLS or SNI routing. A UDP route is a plain forward.
+
+## ADR-039: ACME DNS-01 through Cloudflare (2026-10-10, Accepted)
+- **Decision:** `challenge: dns-01` makes the ACME job publish `_acme-challenge` TXT records through the Cloudflare integration, wait (bounded) until a public resolver shows them, and remove them afterwards. Wildcard names require it. The API refuses a wildcard with HTTP-01.
+- **Boundaries:** the API never calls Cloudflare (ADR-031). Zone discovery is a read-only job (`dns.cloudflare.discover`). The token stays in the vault. NGM-created TXT records carry the `managed-by:ngm` marker.
+- **Not interchangeable:** publicly trusted ACME certificates (Let's Encrypt) and Cloudflare Origin CA certificates are different things. Origin CA certificates are trusted only by Cloudflare's edge, not by browsers. NGM issues ACME certificates and does not manage Origin CA certificates.
+- **Status:** unit-tested against a fake ACME CA and a fake Cloudflare API. **Not live-verified**: no Cloudflare token or delegated zone was available.
+
+## ADR-040: Certificate downloads (2026-10-10, Accepted)
+- `GET /certificates/{id}/fullchain` (certificate plus chain, `certificates.read`) and `GET /certificates/{id}/privkey` (`certificates.write`).
+- The private key requires an interactive user (never an API token) with a fresh second factor (step-up). Every download is audited with the certificate id only, never the key. Responses are `no-store`, `nosniff` attachments.
+- Keys are otherwise vault-only: they never appear in lists, logs or frontend state. The UI fetches the file as a blob and does not keep it.
