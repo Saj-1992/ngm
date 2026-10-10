@@ -61,6 +61,9 @@ type Expect struct {
 	Type  string `json:"type"`
 	Value string `json:"value"`
 	TTL   *int   `json:"ttl,omitempty"`
+	// Proxied asks Cloudflare to proxy the record (orange cloud). Only A, AAAA
+	// and CNAME can be proxied. Default false: DNS-only (see ADR-041).
+	Proxied bool `json:"proxied,omitempty"`
 }
 
 // Obs is the latest observation of one name/type from one source.
@@ -171,7 +174,7 @@ func (s *Service) Get(ctx context.Context, id string) (*Domain, error) {
 }
 
 func (s *Service) fill(ctx context.Context, d *Domain) error {
-	rows, err := s.DB.QueryContext(ctx, "SELECT id,name,rtype,value,ttl FROM dns_record_expectations WHERE domain_id=? ORDER BY name,rtype,value", d.ID)
+	rows, err := s.DB.QueryContext(ctx, "SELECT id,name,rtype,value,ttl,proxied FROM dns_record_expectations WHERE domain_id=? ORDER BY name,rtype,value", d.ID)
 	if err != nil {
 		return err
 	}
@@ -179,7 +182,8 @@ func (s *Service) fill(ctx context.Context, d *Domain) error {
 	for rows.Next() {
 		var e Expect
 		var ttl sql.NullInt64
-		if err := rows.Scan(&e.ID, &e.Name, &e.Type, &e.Value, &ttl); err != nil {
+		var px int
+		if err := rows.Scan(&e.ID, &e.Name, &e.Type, &e.Value, &ttl, &px); err != nil {
 			rows.Close()
 			return err
 		}
@@ -187,6 +191,7 @@ func (s *Service) fill(ctx context.Context, d *Domain) error {
 			v := int(ttl.Int64)
 			e.TTL = &v
 		}
+		e.Proxied = px == 1
 		d.Expected = append(d.Expected, e)
 	}
 	rows.Close()
@@ -416,6 +421,9 @@ func (s *Service) AddExpectation(ctx context.Context, actor *auth.Principal, id 
 		return nil, invalid("%s is not inside %s", name, d.FQDN)
 	}
 	e.Type = strings.ToUpper(e.Type)
+	if e.Proxied && e.Type != "A" && e.Type != "AAAA" && e.Type != "CNAME" {
+		return nil, invalid("only A, AAAA and CNAME records can be proxied")
+	}
 	if !rtypes[e.Type] {
 		return nil, invalid("record type must be A, AAAA, CNAME, CAA, NS or TXT")
 	}
@@ -455,8 +463,8 @@ func (s *Service) AddExpectation(ctx context.Context, actor *auth.Principal, id 
 	}
 	now := store.FormatTime(time.Now())
 	err = s.DB.Tx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO dns_record_expectations(id,domain_id,name,rtype,value,ttl,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-			ids.New(), id, name, e.Type, v, ttl, now, now); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO dns_record_expectations(id,domain_id,name,rtype,value,ttl,proxied,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+			ids.New(), id, name, e.Type, v, ttl, b2i(e.Proxied), now, now); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				return fmt.Errorf("%w: this expectation exists", ErrConflict)
 			}
@@ -606,4 +614,11 @@ func PendingChecks(ctx context.Context, db *store.DB) []string {
 		}
 	}
 	return out
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

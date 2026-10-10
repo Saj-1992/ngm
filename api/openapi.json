@@ -6080,6 +6080,28 @@
           }
         }
       }
+    },
+    "/api/v1/domains/{id}/subdomains": {
+      "post": {
+        "operationId": "createSubdomain",
+        "x-ngm-permission": "domains.write",
+        "summary": "Register a subdomain (manual or automatic label) with its expected DNS record; publish it via the Cloudflare preview/apply",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "created"
+          }
+        }
+      }
     }
   }
 }

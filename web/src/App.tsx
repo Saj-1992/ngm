@@ -24,6 +24,7 @@ import { UsersPage } from "@/pages/Users";
 import { BackupsPage } from "@/pages/ops/Backups";
 import { DnsPage } from "@/pages/web/Dns";
 import { DomainsPage } from "@/pages/web/Domains";
+import { CloudflareZonesPage } from "@/pages/web/CloudflareZones";
 import { WebsiteDetailPage, WebsitesPage } from "@/pages/web/Websites";
 import { FirewallPage } from "@/pages/ops/Firewall";
 import { RecoveryPage } from "@/pages/ops/Recovery";
@@ -85,6 +86,7 @@ function Console() {
         <Route path="/web/websites" element={<WebsitesPage />} />
         <Route path="/web/websites/:id" element={<WebsiteDetailPage />} />
         <Route path="/web/domains" element={<DomainsPage />} />
+        <Route path="/web/cloudflare" element={<CloudflareZonesPage />} />
         <Route path="/web/dns" element={<DnsPage />} />
         <Route path="/system/users" element={<UsersPage />} />
         <Route path="/system/roles" element={<RolesPage />} />

@@ -194,6 +194,8 @@ type Desired struct {
 	Type  string `json:"type"`
 	Value string `json:"value"`
 	TTL   int    `json:"ttl"` // 1 = automatic
+	// Proxied enables the Cloudflare proxy (A/AAAA/CNAME only). Default false.
+	Proxied bool `json:"proxied,omitempty"`
 }
 
 // Change is one planned change.
@@ -222,8 +224,8 @@ func toRecord(d Desired) (Record, error) {
 	case "A", "AAAA", "CNAME", "TXT":
 		r.Content = d.Value
 		if d.Type != "TXT" {
-			f := false
-			r.Proxied = &f // the gateway must receive client traffic directly
+			px := d.Proxied // default false: the gateway receives client traffic directly
+			r.Proxied = &px
 		}
 	case "CAA":
 		f := strings.SplitN(d.Value, " ", 3)
@@ -268,6 +270,9 @@ func MakePlan(zone *Zone, current []Record, desired []Desired) (*Plan, error) {
 			}
 		}
 		switch {
+		case same != nil && same.Managed() && proxyDiffers(same, want):
+			used[same.ID] = true
+			p.Changes = append(p.Changes, Change{Action: "update", Desired: d, Current: same, Reason: "the Cloudflare proxy setting differs"})
 		case same != nil:
 			used[same.ID] = true
 			p.Changes = append(p.Changes, Change{Action: "unchanged", Desired: d, Current: same})
@@ -446,4 +451,14 @@ func LabelTaken(records []Record, fqdn string) bool {
 		}
 	}
 	return false
+}
+
+// proxyDiffers reports whether an existing proxiable record's proxy flag
+// differs from the wanted one.
+func proxyDiffers(cur *Record, want Record) bool {
+	if want.Proxied == nil {
+		return false
+	}
+	c := cur.Proxied != nil && *cur.Proxied
+	return c != *want.Proxied
 }

@@ -1,5 +1,5 @@
 import {
-  Activity, Archive, FileClock, ArrowLeftRight, BookOpen, Cable, FlaskConical, Gauge, Globe, LayoutDashboard, LifeBuoy,
+  Activity, Archive, CloudCog, FileClock, ArrowLeftRight, BookOpen, Cable, FlaskConical, Gauge, Globe, LayoutDashboard, LifeBuoy,
   Lock, Network, Rocket, ScrollText, Server, Settings, Shield, ShieldCheck, Users, Waypoints,
 } from "lucide-react";
 import type { MessageKey } from "./i18n/messages";
@@ -41,6 +41,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { path: "/web/websites", label: "nav.websites", icon: Globe, perm: "websites.read" },
       { path: "/web/domains", label: "nav.domains", icon: Network, perm: "domains.read" },
+      { path: "/web/cloudflare", label: "nav.cloudflare", icon: CloudCog, perm: "domains.read" },
       { path: "/web/dns", label: "nav.dns", icon: ArrowLeftRight, perm: "domains.read" },
       { path: "/web/ssl", label: "nav.ssl", icon: Lock, perm: "certificates.read" },
     ],

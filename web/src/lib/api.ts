@@ -293,7 +293,9 @@ export const ops = {
 // ─── Domains, DNS, ACME, websites (Phase 5) ────────────────────────────────
 
 export type DnsType = "A" | "AAAA" | "CNAME" | "CAA" | "NS" | "TXT";
-export type Expectation = { id: string; name: string; type: DnsType; value: string; ttl?: number };
+export type Expectation = { id: string; name: string; type: DnsType; value: string; ttl?: number; proxied?: boolean };
+export type CfZone = { id: string; name: string };
+export type CfRecord = { id: string; type: string; name: string; content: string; ttl: number; proxied?: boolean; comment?: string };
 export type DnsObservation = { name: string; type: string; source: "authoritative" | "resolver"; server: string; values: string[]; ttl?: number; rcode: string; error?: string; observed_at: string };
 export type DnsCompare = { name: string; type: string; value: string; status: "match" | "mismatch" | "missing" | "propagating" | "unknown"; detail: string };
 export type Domain = {
@@ -326,6 +328,8 @@ export const web = {
     addExpectation: (id: string, b: { name: string; type: DnsType; value: string; ttl?: number }) => request<Domain>(`/api/v1/domains/${id}/expectations`, { method: "POST", body: b }),
     removeExpectation: (id: string, eid: string) => request<void>(`/api/v1/domains/${id}/expectations/${eid}`, { method: "DELETE" }),
     check: (id: string) => request<{ requested: boolean }>(`/api/v1/domains/${id}/check`, { method: "POST" }),
+    createSubdomain: (id: string, b: { label: string; type: "A" | "AAAA" | "CNAME"; value: string; ttl?: number; proxied?: boolean; existing_names?: string[] }) =>
+      request<Domain>(`/api/v1/domains/${id}/subdomains`, { method: "POST", body: b }),
     cfPreview: (id: string, key: string) => request<Accepted>(`/api/v1/domains/${id}/cloudflare/preview`, { method: "POST", headers: { "Idempotency-Key": key } }),
     cfApply: (id: string, plan_hash: string, adopt: string[], key: string) =>
       request<Accepted>(`/api/v1/domains/${id}/cloudflare/apply`, { method: "POST", body: { plan_hash, adopt }, headers: { "Idempotency-Key": key } }),
@@ -334,6 +338,8 @@ export const web = {
     get: () => request<{ configured: boolean; required_permissions: string; note: string }>("/api/v1/integrations/cloudflare"),
     set: (token: string) => request<{ configured: boolean }>("/api/v1/integrations/cloudflare", { method: "PUT", body: { token } }),
     remove: () => request<void>("/api/v1/integrations/cloudflare", { method: "DELETE" }),
+    discover: (zone_id: string | undefined, key: string) =>
+      request<Accepted>("/api/v1/integrations/cloudflare/discover", { method: "POST", body: zone_id ? { zone_id } : {}, headers: { "Idempotency-Key": key } }),
   },
   acme: (b: { name: string; identifiers: string[]; directory: string; email: string; challenge?: string }, key: string) =>
     request<Accepted>("/api/v1/certificates/acme", { method: "POST", body: b, headers: { "Idempotency-Key": key } }),

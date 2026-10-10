@@ -56,7 +56,7 @@ func desiredFrom(d *domains.Domain) []cloudflare.Desired {
 		if e.TTL != nil {
 			ttl = *e.TTL
 		}
-		out = append(out, cloudflare.Desired{Name: e.Name, Type: e.Type, Value: e.Value, TTL: ttl})
+		out = append(out, cloudflare.Desired{Name: e.Name, Type: e.Type, Value: e.Value, TTL: ttl, Proxied: e.Proxied})
 	}
 	return out
 }

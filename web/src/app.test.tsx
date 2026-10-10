@@ -311,3 +311,30 @@ describe("domains and websites (phase 5)", () => {
     expect(await screen.findByText(/renewed 1 time/, {}, { timeout: 4000 })).toBeInTheDocument();
   });
 });
+
+describe("cloudflare zones page", () => {
+  const sess = (perms: string[]) => ({ "/api/v1/auth/session": { status: 200, body: { user: { id: "U1", username: "owner", locale: "en" }, stage: "active", permissions: ["system.read", "jobs.read", ...perms] } } });
+  it("says Cloudflare is not connected instead of faking a list", async () => {
+    mockFetch({ ...sess(["domains.read"]), "/api/v1/integrations/cloudflare": { status: 200, body: { configured: false, required_permissions: "", note: "" } }, "/api/v1/domains": { status: 200, body: { items: [] } } });
+    renderAt("/web/cloudflare");
+    expect(await screen.findByText("Cloudflare is not connected")).toBeInTheDocument();
+  });
+  it("lists discovered zones, shows records and the proxy warning for a registered zone", async () => {
+    const D = { id: "D1", fqdn: "example.com", purpose: "general", notes: "", dns_provider: "cloudflare", revision: 1, created_at: "2026-10-08T00:00:00Z", updated_at: "2026-10-08T00:00:00Z", dns_status: "ok", expectations: [], observations: [], comparison: [] };
+    mockFetch({
+      ...sess(["domains.read", "domains.write"]),
+      "/api/v1/integrations/cloudflare": { status: 200, body: { configured: true, required_permissions: "", note: "" } },
+      "/api/v1/domains": { status: 200, body: { items: [D] } },
+      "/api/v1/integrations/cloudflare/discover": { status: 202, body: { job_id: "J1", status: "queued", replayed: false } },
+      "/api/v1/jobs/J1": { status: 200, body: { id: "J1", kind: "dns.cloudflare.discover", state: "Succeeded", result: { zones: [{ id: "Z1", name: "example.com" }, { id: "Z2", name: "another.test" }], records: [{ id: "R1", type: "A", name: "www.example.com", content: "203.0.113.5", ttl: 1, proxied: false, comment: "managed-by:ngm" }], zone_id: "Z1" } } },
+    });
+    renderAt("/web/cloudflare");
+    const zoneBtn = await screen.findByRole("button", { name: /example\.com/ });
+    expect(screen.getByText("another.test")).toBeInTheDocument();
+    fireEvent.click(zoneBtn);
+    expect(await screen.findByText("New subdomain")).toBeInTheDocument();
+    expect(screen.getByText(/Off by default\. A proxied record only carries standard HTTP\(S\) ports/)).toBeInTheDocument();
+    expect(await screen.findByText("203.0.113.5")).toBeInTheDocument();
+    expect(screen.getAllByText("NGM").length).toBeGreaterThan(0);
+  });
+});

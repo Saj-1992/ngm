@@ -232,3 +232,28 @@ func TestLabelGenerationAndCollision(t *testing.T) {
 		t.Fatal("collision check")
 	}
 }
+
+func TestProxyFlagDefaultsOffAndIsDetected(t *testing.T) {
+	z := &Zone{ID: "Z1", Name: "example.com"}
+	// Default: DNS-only.
+	r, _ := toRecord(Desired{Name: "a.example.com", Type: "A", Value: "203.0.113.5"})
+	if r.Proxied == nil || *r.Proxied {
+		t.Fatal("proxy must default to off")
+	}
+	// An NGM-managed record that is DNS-only but should be proxied → update.
+	off := false
+	cur := []Record{{ID: "R1", Type: "A", Name: "a.example.com", Content: "203.0.113.5", Proxied: &off, Comment: Marker}}
+	p, err := MakePlan(z, cur, []Desired{{Name: "a.example.com", Type: "A", Value: "203.0.113.5", Proxied: true}})
+	if err != nil || len(p.Changes) != 1 || p.Changes[0].Action != "update" {
+		t.Fatalf("expected an update for a proxy change: %+v %v", p.Changes, err)
+	}
+	// Identical settings → unchanged. A TXT is never proxied.
+	p, _ = MakePlan(z, cur, []Desired{{Name: "a.example.com", Type: "A", Value: "203.0.113.5"}})
+	if p.Changes[0].Action != "unchanged" {
+		t.Fatalf("expected unchanged: %+v", p.Changes)
+	}
+	tr, _ := toRecord(Desired{Name: "t.example.com", Type: "TXT", Value: "x", Proxied: true})
+	if tr.Proxied != nil {
+		t.Fatal("TXT records cannot be proxied")
+	}
+}
