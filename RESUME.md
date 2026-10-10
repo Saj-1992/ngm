@@ -24,6 +24,7 @@ the next session continues from **Next steps**, the first unchecked item. Do not
 - [x] ACME DNS-01 via Cloudflare + zone discovery + TXT helpers + label generator (unit-tested with fakes; NOT live: no Cloudflare token).
 - [x] ADR-037..040, CHANGELOG.md, crawler-classification limits in SECURITY_MODEL. Pushed to GitHub main (normal push, no force).
 - [ ] Full E2E on 0.8.1-rc.6 (running: sh scripts/e2e/run_all.sh; summary in dist/e2e/summary.txt). Then record in TEST_REPORT.
+- [x] Cloudflare zones/subdomain UI committed (b10764a, web 30 tests + Go green; NOT yet shipped to VM: wait for the E2E above, then build rc.7, ngm update apply, live-check POST /domains/{id}/subdomains).
 - [ ] CI result for commit 6dff9db on GitHub.
 - [ ] Remaining gaps vs the master prompt (do next, in order):
   1. Cloudflare UI: token/zone list/subdomain create (auto/manual naming, proxy, TTL) page; /domains/{id}/cloudflare already previews/applies DNS.
