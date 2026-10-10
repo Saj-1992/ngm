@@ -23,6 +23,21 @@ func (s *Server) registerCloudflareRoutes() {
 	s.handle("DELETE", "/api/v1/integrations/cloudflare", "secrets.write", s.deleteCloudflare)
 	s.handle("POST", "/api/v1/domains/{id}/cloudflare/preview", "domains.read", s.cloudflarePreview)
 	s.handle("POST", "/api/v1/domains/{id}/cloudflare/apply", "domains.write", s.cloudflareApply)
+	s.handle("POST", "/api/v1/integrations/cloudflare/discover", "domains.read", s.cloudflareDiscover)
+}
+
+// cloudflareDiscover submits a read-only job that lists the token's zones (and,
+// with a zone_id, that zone's records). The API never calls Cloudflare itself
+// (ADR-031); the result arrives in the job.
+func (s *Server) cloudflareDiscover(w http.ResponseWriter, r *http.Request) error {
+	if !s.cloudflareConfigured(r) {
+		return apierr.BadRequest("no Cloudflare API token is configured")
+	}
+	var in struct {
+		ZoneID string `json:"zone_id,omitempty"`
+	}
+	_ = decodeJSON(r, &in)
+	return s.submitJob(w, r, "dns.cloudflare.discover", []string{"dns-provider"}, in)
 }
 
 func (s *Server) cloudflareConfigured(r *http.Request) bool {

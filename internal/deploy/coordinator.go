@@ -134,7 +134,7 @@ func lockSetFor(kind string) ([]locks.Resource, bool) {
 		return backupLocks, true
 	case KindACME:
 		return []locks.Resource{locks.Certificate}, true
-	case KindDNSPreview, KindDNSApply:
+	case KindDNSPreview, KindDNSApply, KindDNSDiscover:
 		return dnsLocks, true
 	case KindSiteBuild, KindSitePublish, KindSiteDelete:
 		return siteLocks, true
@@ -304,6 +304,8 @@ func (c *Coordinator) run(parent context.Context, j *jobs.Job, lease *locks.Leas
 		c.runACME(r)
 	case KindDNSPreview, KindDNSApply:
 		c.runDNS(r)
+	case KindDNSDiscover:
+		c.runDNSDiscover(r)
 	case KindSiteBuild:
 		c.runSiteBuild(r)
 	case KindSitePublish:
@@ -1167,7 +1169,7 @@ func (c *Coordinator) reconcileOne(r *runner) {
 		}
 		return
 	}
-	if r.j.Kind == KindDNSPreview || (r.j.Kind == KindDNSApply && r.state.Cancellable()) {
+	if r.j.Kind == KindDNSPreview || r.j.Kind == KindDNSDiscover || (r.j.Kind == KindDNSApply && r.state.Cancellable()) {
 		r.end(jobs.Failed, "interrupted", nil, &failure{Code: "interrupted", Message: "interrupted before any DNS change; run it again"})
 		return
 	}

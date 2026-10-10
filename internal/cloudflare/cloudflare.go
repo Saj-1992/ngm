@@ -377,3 +377,73 @@ func Drift(current []Record, desired []Desired) []string {
 	}
 	return out
 }
+
+// Zones lists every zone the token can access (paginated), sorted by name.
+func (c *Client) Zones(ctx context.Context) ([]Zone, error) {
+	var all []Zone
+	for page := 1; page <= 50; page++ {
+		var zs []Zone
+		if err := c.do(ctx, "GET", fmt.Sprintf("/zones?per_page=50&page=%d", page), nil, &zs); err != nil {
+			return nil, err
+		}
+		all = append(all, zs...)
+		if len(zs) < 50 {
+			break
+		}
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].Name < all[j].Name })
+	return all, nil
+}
+
+// UpsertTXT creates or updates a TXT record (used for ACME DNS-01). It marks
+// the record as NGM-managed and returns its id.
+func (c *Client) UpsertTXT(ctx context.Context, zoneID, name, value string) (string, error) {
+	recs, err := c.Records(ctx, zoneID)
+	if err != nil {
+		return "", err
+	}
+	body := Record{Type: "TXT", Name: name, Content: value, TTL: 60, Comment: Marker + " acme-dns01"}
+	for _, r := range recs {
+		if r.Type == "TXT" && strings.EqualFold(strings.TrimSuffix(r.Name, "."), strings.TrimSuffix(name, ".")) && r.Content == value {
+			return r.ID, nil // already present
+		}
+	}
+	var out Record
+	if err := c.do(ctx, "POST", fmt.Sprintf("/zones/%s/dns_records", url.PathEscape(zoneID)), body, &out); err != nil {
+		return "", err
+	}
+	return out.ID, nil
+}
+
+// DeleteRecord removes a record by id (NGM-created challenge cleanup).
+func (c *Client) DeleteRecord(ctx context.Context, zoneID, recordID string) error {
+	return c.do(ctx, "DELETE", fmt.Sprintf("/zones/%s/dns_records/%s", url.PathEscape(zoneID), url.PathEscape(recordID)), nil, nil)
+}
+
+var labelAlphabet = []byte("abcdefghijklmnopqrstuvwxyz0123456789")
+
+// GenerateLabel returns a random DNS label of n characters (a–z0–9, first
+// character a letter). It is used for automatic subdomain naming; the caller
+// checks for collisions against the zone's existing records.
+func GenerateLabel(n int, randByte func() byte) string {
+	if n < 2 {
+		n = 2
+	}
+	b := make([]byte, n)
+	b[0] = labelAlphabet[int(randByte())%26]
+	for i := 1; i < n; i++ {
+		b[i] = labelAlphabet[int(randByte())%len(labelAlphabet)]
+	}
+	return string(b)
+}
+
+// LabelTaken reports whether any record exists at fqdn (case-insensitive).
+func LabelTaken(records []Record, fqdn string) bool {
+	f := strings.ToLower(strings.TrimSuffix(fqdn, "."))
+	for _, r := range records {
+		if strings.ToLower(strings.TrimSuffix(r.Name, ".")) == f {
+			return true
+		}
+	}
+	return false
+}

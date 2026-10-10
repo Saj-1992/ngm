@@ -6068,6 +6068,18 @@
           }
         }
       }
+    },
+    "/api/v1/integrations/cloudflare/discover": {
+      "post": {
+        "operationId": "cloudflareDiscover",
+        "x-ngm-permission": "domains.read",
+        "summary": "List Cloudflare zones and a zones records via a read-only job",
+        "responses": {
+          "202": {
+            "description": "job accepted"
+          }
+        }
+      }
     }
   }
 }

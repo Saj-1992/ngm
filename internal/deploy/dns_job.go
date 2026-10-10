@@ -161,3 +161,51 @@ func auditEventDNS(actor, job, domainID, actions, result string) audit.Event {
 	return audit.Event{ActorKind: "user", ActorID: actor, Action: "dns.cloudflare_apply", TargetKind: "domain", TargetID: domainID, JobID: job, Result: result,
 		Context: map[string]any{"changes": actions}}
 }
+
+// KindDNSDiscover is a read-only job: list the token's zones (and, with a
+// zone_id, that zone's DNS records). The API never calls Cloudflare directly
+// (ADR-031), so discovery for the panel runs here in ngm-ops.
+const KindDNSDiscover = "dns.cloudflare.discover"
+
+// DiscoverPayload optionally narrows discovery to one zone's records.
+type DiscoverPayload struct {
+	ZoneID string `json:"zone_id,omitempty"`
+}
+
+func (c *Coordinator) runDNSDiscover(r *runner) {
+	ctx := r.ctx
+	var p DiscoverPayload
+	_ = json.Unmarshal(r.j.Payload, &p)
+	if err := r.to(jobs.Validating, "validate", jobs.Idempotent, p); err != nil {
+		return
+	}
+	cl, err := c.cloudflareClient(ctx)
+	if err != nil {
+		r.end(jobs.Blocked, "cloudflare", nil, &failure{Code: "cloudflare", Message: err.Error()})
+		return
+	}
+	zones, err := cl.Zones(ctx)
+	if err != nil {
+		r.end(jobs.Blocked, "cloudflare", nil, &failure{Code: "cloudflare", Message: err.Error()})
+		return
+	}
+	result := map[string]any{"zones": zones}
+	if p.ZoneID != "" {
+		recs, err := cl.Records(ctx, p.ZoneID)
+		if err != nil {
+			r.end(jobs.Blocked, "cloudflare", nil, &failure{Code: "cloudflare", Message: err.Error()})
+			return
+		}
+		result["records"] = recs
+		result["zone_id"] = p.ZoneID
+	}
+	if err := r.to(jobs.ImpactAnalyzed, "discovered", jobs.Idempotent, map[string]any{"zones": len(zones)}); err != nil {
+		return
+	}
+	ro := map[string]string{"note": "read-only discovery; nothing is changed at the provider"}
+	_ = r.to(jobs.Staging, "stage", jobs.Idempotent, ro)
+	_ = r.to(jobs.Preflight, "preflight", jobs.Idempotent, ro)
+	_ = r.to(jobs.Applying, "no_change", jobs.Idempotent, ro)
+	_ = r.to(jobs.Verifying, "verify", jobs.Idempotent, ro)
+	r.end(jobs.Succeeded, "succeeded", result, nil)
+}

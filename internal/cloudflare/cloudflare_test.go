@@ -37,8 +37,14 @@ func (f *fakeCF) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/user/tokens/verify":
 		ok(map[string]string{"status": "active"})
 	case p == "/zones":
-		if r.URL.Query().Get("name") == "example.com" {
-			ok([]Zone{{ID: "Z1", Name: "example.com"}})
+		if n := r.URL.Query().Get("name"); n != "" {
+			if n == "example.com" {
+				ok([]Zone{{ID: "Z1", Name: "example.com"}})
+			} else {
+				ok([]Zone{})
+			}
+		} else if r.URL.Query().Get("page") == "1" {
+			ok([]Zone{{ID: "Z1", Name: "example.com"}, {ID: "Z2", Name: "another.test"}})
 		} else {
 			ok([]Zone{})
 		}
@@ -64,6 +70,11 @@ func (f *fakeCF) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.records[id] = rec
 		f.writes = append(f.writes, "update "+id)
 		ok(rec)
+	case strings.HasPrefix(p, "/zones/Z1/dns_records/") && r.Method == "DELETE":
+		id := strings.TrimPrefix(p, "/zones/Z1/dns_records/")
+		delete(f.records, id)
+		f.writes = append(f.writes, "delete "+id)
+		ok(map[string]string{"id": id})
 	default:
 		w.WriteHeader(404)
 		json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]string{{"message": "not found"}}})
@@ -179,5 +190,45 @@ func TestTokenNeverInErrors(t *testing.T) {
 	err = c.Verify(ctx)
 	if err == nil || strings.Contains(err.Error(), "wrong-secret-token-xyz") {
 		t.Fatalf("unreachable: %v", err)
+	}
+}
+
+func TestZonesListing(t *testing.T) {
+	c, _ := setup(t)
+	zs, err := c.Zones(context.Background())
+	if err != nil || len(zs) != 2 || zs[0].Name != "another.test" || zs[1].Name != "example.com" {
+		t.Fatalf("zones: %v %v", zs, err)
+	}
+}
+
+func TestTXTUpsertAndDelete(t *testing.T) {
+	c, f := setup(t)
+	ctx := context.Background()
+	id, err := c.UpsertTXT(ctx, "Z1", "_acme-challenge.example.com", "token-value-123")
+	if err != nil || id == "" {
+		t.Fatalf("upsert: %v %v", id, err)
+	}
+	// Idempotent: same value returns without a new create.
+	before := len(f.writes)
+	if _, err := c.UpsertTXT(ctx, "Z1", "_acme-challenge.example.com", "token-value-123"); err != nil || len(f.writes) != before {
+		t.Fatalf("upsert not idempotent: writes %d→%d", before, len(f.writes))
+	}
+	if err := c.DeleteRecord(ctx, "Z1", id); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok := f.records[id]; ok {
+		t.Fatal("record not deleted")
+	}
+}
+
+func TestLabelGenerationAndCollision(t *testing.T) {
+	n := byte(0)
+	l := GenerateLabel(8, func() byte { n++; return n })
+	if len(l) != 8 || l[0] < 'a' || l[0] > 'z' {
+		t.Fatalf("label %q", l)
+	}
+	recs := []Record{{Name: "taken.example.com"}}
+	if !LabelTaken(recs, "TAKEN.example.com.") || LabelTaken(recs, "free.example.com") {
+		t.Fatal("collision check")
 	}
 }

@@ -25,7 +25,8 @@ type ACMEPayload struct {
 	Identifiers   []string `json:"identifiers,omitempty"`
 	Directory     string   `json:"directory"` // letsencrypt-staging | letsencrypt
 	Email         string   `json:"email,omitempty"`
-	Trigger       string   `json:"trigger,omitempty"` // manual | scheduled
+	Challenge     string   `json:"challenge,omitempty"` // http-01 (default) | dns-01 (Cloudflare; required for wildcards)
+	Trigger       string   `json:"trigger,omitempty"`   // manual | scheduled
 }
 
 // ACMEState is stored in certificates.acme_json.
@@ -108,9 +109,25 @@ func (c *Coordinator) runACME(r *runner) {
 			return
 		}
 	}
+	// Challenge selection: HTTP-01 (default) or DNS-01 via Cloudflare.
+	var solver certauto.DNSSolver
+	dns01 := p.Challenge == "dns-01"
+	for _, n := range names {
+		if strings.HasPrefix(n, "*.") && !dns01 {
+			block("validation_failed", "wildcard certificates require the dns-01 challenge")
+			return
+		}
+	}
 	// Prerequisites from evidence.
-	pre := map[string]any{"directory": p.Directory, "names": names, "renewal": renewal}
-	if why := c.acmeHTTPReady(ctx); why != "" {
+	pre := map[string]any{"directory": p.Directory, "names": names, "renewal": renewal, "challenge": chalName(dns01)}
+	if dns01 {
+		cl, err := c.cloudflareClient(ctx)
+		if err != nil {
+			block("dns01_unavailable", "dns-01 needs the Cloudflare integration: "+err.Error())
+			return
+		}
+		solver = newCFDNSSolver(cl)
+	} else if why := c.acmeHTTPReady(ctx); why != "" {
 		block("http01_unavailable", why)
 		return
 	}
@@ -141,7 +158,7 @@ func (c *Coordinator) runACME(r *runner) {
 		}
 	}
 	octx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	res, err := is.Issue(octx, dir, p.Email, names, step)
+	res, err := is.Issue(octx, dir, p.Email, names, solver, step)
 	cancel()
 	recordErr := func(msg string) {
 		if renewal {

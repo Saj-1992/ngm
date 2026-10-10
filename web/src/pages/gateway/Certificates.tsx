@@ -19,7 +19,7 @@ export function CertificatesPage() {
   const { can } = useSession();
   const certs = useAsync(gw.certificates.list);
   const [mode, setMode] = useState<"import" | "self" | "acme" | null>(null);
-  const [f, setF] = useState({ name: "", cert: "", key: "", hosts: "", days: 90, directory: "letsencrypt-staging", email: "" });
+  const [f, setF] = useState({ name: "", cert: "", key: "", hosts: "", days: 90, directory: "letsencrypt-staging", email: "", challenge: "http-01" });
   const [job, setJob] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const writable = can("certificates.write");
@@ -27,9 +27,9 @@ export function CertificatesPage() {
     setErr(null);
     try {
       if (mode === "import") await gw.certificates.import({ name: f.name, cert_pem: f.cert, key_pem: f.key });
-      else if (mode === "acme") setJob((await web.acme({ name: f.name, identifiers: lines(f.hosts), directory: f.directory, email: f.email }, actionKey())).job_id);
+      else if (mode === "acme") setJob((await web.acme({ name: f.name, identifiers: lines(f.hosts), directory: f.directory, email: f.email, challenge: f.challenge }, actionKey())).job_id);
       else await gw.certificates.selfSigned({ name: f.name, hosts: lines(f.hosts), days: Number(f.days) });
-      setF({ name: "", cert: "", key: "", hosts: "", days: 90, directory: "letsencrypt-staging", email: "" });
+      setF({ name: "", cert: "", key: "", hosts: "", days: 90, directory: "letsencrypt-staging", email: "", challenge: "http-01" });
       setMode(null);
       certs.reload();
     } catch (e) {
@@ -96,6 +96,11 @@ export function CertificatesPage() {
                 </Select>
               )}</Field>
               <Field label={t("ssl.email")}>{({ id }) => <Input id={id} dir="ltr" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}</Field>
+              <Field label={t("ssl.challenge")} hint={t(f.challenge === "dns-01" ? "ssl.dns01Hint" : "ssl.http01Hint")}>{({ id, describedBy }) => (
+                <Select id={id} aria-describedby={describedBy} value={f.challenge} onChange={(e) => setF({ ...f, challenge: e.target.value })}>
+                  <option value="http-01">HTTP-01</option><option value="dns-01">DNS-01 (Cloudflare, wildcards)</option>
+                </Select>
+              )}</Field>
             </>
           ) : (
             <>

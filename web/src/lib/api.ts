@@ -335,7 +335,7 @@ export const web = {
     set: (token: string) => request<{ configured: boolean }>("/api/v1/integrations/cloudflare", { method: "PUT", body: { token } }),
     remove: () => request<void>("/api/v1/integrations/cloudflare", { method: "DELETE" }),
   },
-  acme: (b: { name: string; identifiers: string[]; directory: string; email: string }, key: string) =>
+  acme: (b: { name: string; identifiers: string[]; directory: string; email: string; challenge?: string }, key: string) =>
     request<Accepted>("/api/v1/certificates/acme", { method: "POST", body: b, headers: { "Idempotency-Key": key } }),
   renew: (id: string, key: string) => request<Accepted>(`/api/v1/certificates/${id}/renew`, { method: "POST", headers: { "Idempotency-Key": key } }),
   sites: {

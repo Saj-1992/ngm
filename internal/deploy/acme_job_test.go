@@ -64,6 +64,9 @@ func (t testClient) GetAuthorization(_ context.Context, u string) (*acme.Authori
 func (t testClient) HTTP01ChallengeResponse(tok string) (string, error) {
 	return tok + "." + strings.Repeat("A", 43), nil
 }
+func (t testClient) DNS01ChallengeRecord(tok string) (string, error) {
+	return strings.Repeat("A", 43), nil
+}
 func (t testClient) Accept(_ context.Context, c *acme.Challenge) (*acme.Challenge, error) {
 	t.ca.h.mu.Lock()
 	defer t.ca.h.mu.Unlock()

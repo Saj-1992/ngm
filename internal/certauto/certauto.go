@@ -44,6 +44,7 @@ type Client interface {
 	AuthorizeOrder(ctx context.Context, id []acme.AuthzID, opt ...acme.OrderOption) (*acme.Order, error)
 	GetAuthorization(ctx context.Context, url string) (*acme.Authorization, error)
 	HTTP01ChallengeResponse(token string) (string, error)
+	DNS01ChallengeRecord(token string) (string, error)
 	Accept(ctx context.Context, chal *acme.Challenge) (*acme.Challenge, error)
 	WaitAuthorization(ctx context.Context, url string) (*acme.Authorization, error)
 	WaitOrder(ctx context.Context, url string) (*acme.Order, error)
@@ -54,6 +55,17 @@ type Client interface {
 type Challenges interface {
 	Put(ctx context.Context, token, keyAuth string) error
 	Clear(ctx context.Context, token string) error
+}
+
+// DNSSolver publishes ACME DNS-01 TXT records (Cloudflare in production). It
+// enables DNS-01 validation, which is the only way to obtain wildcard
+// certificates. fqdn is the full "_acme-challenge.<name>" record name.
+type DNSSolver interface {
+	PresentTXT(ctx context.Context, fqdn, value string) error
+	// Propagated blocks (bounded) until the TXT is visible, or returns an
+	// error; it may return nil immediately when a wait is not needed.
+	Propagated(ctx context.Context, fqdn, value string) error
+	CleanupTXT(ctx context.Context, fqdn, value string) error
 }
 
 // SelfCheck fetches http://<name>/.well-known/acme-challenge/<token> the way
@@ -213,7 +225,9 @@ type Result struct {
 type Step func(name string, evidence any)
 
 // Issue runs one order for names and returns the verified chain and new key.
-func (is *Issuer) Issue(ctx context.Context, directory, email string, names []string, step Step) (*Result, error) {
+// When dns is non-nil, DNS-01 validation is used (required for wildcards);
+// otherwise HTTP-01.
+func (is *Issuer) Issue(ctx context.Context, directory, email string, names []string, dns DNSSolver, step Step) (*Result, error) {
 	if step == nil {
 		step = func(string, any) {}
 	}
@@ -225,11 +239,17 @@ func (is *Issuer) Issue(ctx context.Context, directory, email string, names []st
 	if err != nil {
 		return nil, fmt.Errorf("new order: %w", err)
 	}
-	step("order", map[string]any{"order": order.URI, "status": order.Status, "authorizations": len(order.AuthzURLs)})
-	var published []string
+	step("order", map[string]any{"order": order.URI, "status": order.Status, "authorizations": len(order.AuthzURLs), "challenge": chalType(dns)})
+	var published []string // HTTP-01 tokens
+	type txt struct{ fqdn, val string }
+	var dnsTXT []txt
 	defer func() {
+		wc := context.WithoutCancel(ctx)
 		for _, t := range published {
-			_ = is.challenges().Clear(context.WithoutCancel(ctx), t)
+			_ = is.challenges().Clear(wc, t)
+		}
+		for _, r := range dnsTXT {
+			_ = dns.CleanupTXT(wc, r.fqdn, r.val)
 		}
 	}()
 	for _, u := range order.AuthzURLs {
@@ -240,29 +260,49 @@ func (is *Issuer) Issue(ctx context.Context, directory, email string, names []st
 		if z.Status == acme.StatusValid {
 			continue // reused authorization
 		}
+		wantType := "http-01"
+		if dns != nil {
+			wantType = "dns-01"
+		}
 		var chal *acme.Challenge
 		for _, c := range z.Challenges {
-			if c.Type == "http-01" {
+			if c.Type == wantType {
 				chal = c
 			}
 		}
 		if chal == nil {
-			return nil, fmt.Errorf("%s: the CA offered no http-01 challenge", z.Identifier.Value)
+			return nil, fmt.Errorf("%s: the CA offered no %s challenge", z.Identifier.Value, wantType)
 		}
-		ka, err := cl.HTTP01ChallengeResponse(chal.Token)
-		if err != nil {
-			return nil, err
-		}
-		if err := is.challenges().Put(ctx, chal.Token, ka); err != nil {
-			return nil, fmt.Errorf("publish challenge: %w", err)
-		}
-		published = append(published, chal.Token)
-		if is.Check != nil {
-			if err := is.Check(ctx, z.Identifier.Value, chal.Token, ka); err != nil {
-				return nil, err // the CA is not contacted for validation
+		if dns != nil {
+			val, err := cl.DNS01ChallengeRecord(chal.Token)
+			if err != nil {
+				return nil, err
 			}
+			fqdn := "_acme-challenge." + z.Identifier.Value
+			if err := dns.PresentTXT(ctx, fqdn, val); err != nil {
+				return nil, fmt.Errorf("publish DNS-01 TXT for %s: %w", z.Identifier.Value, err)
+			}
+			dnsTXT = append(dnsTXT, txt{fqdn, val})
+			if err := dns.Propagated(ctx, fqdn, val); err != nil {
+				return nil, fmt.Errorf("%s: TXT not visible: %w", fqdn, err)
+			}
+			step("challenge_ready", map[string]any{"name": z.Identifier.Value, "type": "dns-01"})
+		} else {
+			ka, err := cl.HTTP01ChallengeResponse(chal.Token)
+			if err != nil {
+				return nil, err
+			}
+			if err := is.challenges().Put(ctx, chal.Token, ka); err != nil {
+				return nil, fmt.Errorf("publish challenge: %w", err)
+			}
+			published = append(published, chal.Token)
+			if is.Check != nil {
+				if err := is.Check(ctx, z.Identifier.Value, chal.Token, ka); err != nil {
+					return nil, err // the CA is not contacted for validation
+				}
+			}
+			step("challenge_ready", map[string]any{"name": z.Identifier.Value, "type": "http-01", "self_check": is.Check != nil})
 		}
-		step("challenge_ready", map[string]any{"name": z.Identifier.Value, "self_check": is.Check != nil})
 		if _, err := cl.Accept(ctx, chal); err != nil {
 			return nil, fmt.Errorf("accept challenge: %w", err)
 		}
@@ -337,4 +377,12 @@ func (is *Issuer) challenges() Challenges {
 		return nopChallenges{}
 	}
 	return is.pub
+}
+
+// chalType labels the challenge for step evidence.
+func chalType(dns DNSSolver) string {
+	if dns != nil {
+		return "dns-01"
+	}
+	return "http-01"
 }

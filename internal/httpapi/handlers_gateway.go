@@ -832,6 +832,7 @@ type acmeIn struct {
 	Identifiers []string `json:"identifiers"`
 	Directory   string   `json:"directory"`
 	Email       string   `json:"email"`
+	Challenge   string   `json:"challenge,omitempty"` // http-01 (default) | dns-01
 }
 
 var acmeDirectories = map[string]bool{"letsencrypt-staging": true, "letsencrypt": true}
@@ -854,6 +855,17 @@ func (s *Server) acmeCertificate(w http.ResponseWriter, r *http.Request) error {
 	}
 	if in.Email != "" && (len(in.Email) > 254 || !strings.Contains(in.Email, "@") || strings.ContainsAny(in.Email, " <>\"\r\n")) {
 		return apierr.BadRequest("invalid contact email")
+	}
+	if in.Challenge == "" {
+		in.Challenge = "http-01"
+	}
+	if in.Challenge != "http-01" && in.Challenge != "dns-01" {
+		return apierr.BadRequest("challenge must be http-01 or dns-01")
+	}
+	for _, n := range in.Identifiers {
+		if strings.HasPrefix(n, "*.") && in.Challenge != "dns-01" {
+			return apierr.BadRequest("wildcard names require the dns-01 challenge (Cloudflare)")
+		}
 	}
 	return s.submitJob(w, r, jobKindACME, []string{"certificate"}, in)
 }

@@ -66,6 +66,9 @@ func (f *fakeClient) GetAuthorization(_ context.Context, u string) (*acme.Author
 func (f *fakeClient) HTTP01ChallengeResponse(token string) (string, error) {
 	return token + "." + strings.Repeat("T", 43), nil
 }
+func (f *fakeClient) DNS01ChallengeRecord(token string) (string, error) {
+	return strings.Repeat("D", 43), nil
+}
 func (f *fakeClient) Accept(_ context.Context, c *acme.Challenge) (*acme.Challenge, error) {
 	f.ca.accepted = append(f.ca.accepted, c.Token)
 	return c, nil
@@ -130,7 +133,7 @@ func TestIssueHTTP01(t *testing.T) {
 	is, ca, ch := setup(t)
 	ctx := context.Background()
 	var steps []string
-	res, err := is.Issue(ctx, Directories["letsencrypt-staging"], "ops@example.com", []string{"example.com", "www.example.com"}, func(n string, _ any) { steps = append(steps, n) })
+	res, err := is.Issue(ctx, Directories["letsencrypt-staging"], "ops@example.com", []string{"example.com", "www.example.com"}, nil, func(n string, _ any) { steps = append(steps, n) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +147,7 @@ func TestIssueHTTP01(t *testing.T) {
 		t.Fatalf("steps %v", steps)
 	}
 	// Second order reuses the stored account.
-	if _, err := is.Issue(ctx, Directories["letsencrypt-staging"], "", []string{"example.com"}, nil); err != nil || ca.registered != 1 {
+	if _, err := is.Issue(ctx, Directories["letsencrypt-staging"], "", []string{"example.com"}, nil, nil); err != nil || ca.registered != 1 {
 		t.Fatalf("account reuse: %v registered=%d", err, ca.registered)
 	}
 	var n int
@@ -161,19 +164,19 @@ func TestIssueFailuresStopSafely(t *testing.T) {
 	is.Check = func(context.Context, string, string, string) error {
 		return errors.New("self-check example.com: HTTP 404")
 	}
-	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil); err == nil || len(ca.accepted) != 0 || len(ch.files) != 0 {
+	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil, nil); err == nil || len(ca.accepted) != 0 || len(ch.files) != 0 {
 		t.Fatalf("self-check: %v accepted=%v left=%v", err, ca.accepted, ch.files)
 	}
 	// CA rejects validation → error, challenge files cleared.
 	is, ca, ch = setup(t)
 	ca.failAuthz = true
-	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil); err == nil || !strings.Contains(err.Error(), "validation failed") || len(ch.files) != 0 {
+	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil, nil); err == nil || !strings.Contains(err.Error(), "validation failed") || len(ch.files) != 0 {
 		t.Fatalf("authz failure: %v left=%v", err, ch.files)
 	}
 	// Certificate for other names is rejected before it is stored.
 	is, ca, _ = setup(t)
 	ca.wrongNames = true
-	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil); err == nil || !strings.Contains(err.Error(), "does not cover") {
+	if _, err := is.Issue(ctx, "https://ca/dir", "", []string{"example.com"}, nil, nil); err == nil || !strings.Contains(err.Error(), "does not cover") {
 		t.Fatalf("wrong names: %v", err)
 	}
 }
@@ -192,5 +195,43 @@ func TestValidateIdentifiers(t *testing.T) {
 	got, err := ValidateIdentifiers([]string{"Example.com.", "example.com", "www.example.com"})
 	if err != nil || strings.Join(got, ",") != "example.com,www.example.com" {
 		t.Fatalf("%v %v", got, err)
+	}
+}
+
+type fakeSolver struct {
+	presented map[string]string
+	cleaned   int
+	propagate error
+}
+
+func (s *fakeSolver) PresentTXT(_ context.Context, fqdn, value string) error {
+	if s.presented == nil {
+		s.presented = map[string]string{}
+	}
+	s.presented[fqdn] = value
+	return nil
+}
+func (s *fakeSolver) Propagated(context.Context, string, string) error { return s.propagate }
+func (s *fakeSolver) CleanupTXT(_ context.Context, _, _ string) error  { s.cleaned++; return nil }
+
+func TestIssueDNS01Wildcard(t *testing.T) {
+	is, ca, ch := setup(t)
+	sol := &fakeSolver{}
+	res, err := is.Issue(context.Background(), Directories["letsencrypt-staging"], "ops@example.com", []string{"example.com", "*.example.com"}, sol, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.ChainPEM, "BEGIN CERTIFICATE") {
+		t.Fatal("no chain")
+	}
+	// DNS-01 was used: TXT presented for each authz, HTTP-01 never published, TXT cleaned up.
+	if _, ok := sol.presented["_acme-challenge.example.com"]; !ok {
+		t.Fatalf("expected TXT for the base name, got %v", sol.presented)
+	}
+	if ch.puts != 0 {
+		t.Fatalf("HTTP-01 must not be used for dns-01 (puts=%d)", ch.puts)
+	}
+	if len(ca.accepted) != 2 || sol.cleaned != 2 {
+		t.Fatalf("accepted=%v cleaned=%d", ca.accepted, sol.cleaned)
 	}
 }

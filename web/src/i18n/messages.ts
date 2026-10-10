@@ -871,6 +871,9 @@ export const en = {
   "ssl.dlKey": "Download private key (privkey.pem)",
   "gw.udp": "UDP (Layer 4)",
   "gw.udpHint": "Forward UDP datagrams instead of TCP. A UDP and a TCP listener may share the same port.",
+  "ssl.challenge": "Validation method",
+  "ssl.http01Hint": "HTTP-01: the server answers a challenge on port 80. Needs public DNS pointing here.",
+  "ssl.dns01Hint": "DNS-01: a TXT record is created via the Cloudflare integration. Required for wildcard (*.example.com) certificates.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1748,4 +1751,7 @@ export const fa: Record<MessageKey, string> = {
   "ssl.dlKey": "دانلود کلید خصوصی (privkey.pem)",
   "gw.udp": "UDP (لایهٔ ۴)",
   "gw.udpHint": "به‌جای TCP، بسته‌های UDP را هدایت می‌کند. یک listener UDP و TCP می‌توانند یک پورت را مشترک داشته باشند.",
+  "ssl.challenge": "روش اعتبارسنجی",
+  "ssl.http01Hint": "HTTP-01: سرور یک چالش را روی پورت ۸۰ پاسخ می‌دهد. نیازمند DNS عمومی به این سرور است.",
+  "ssl.dns01Hint": "DNS-01: یک رکورد TXT از طریق یکپارچگی Cloudflare ساخته می‌شود. برای گواهی‌های wildcard (مثل ‎*.example.com‎) لازم است.",
 };
