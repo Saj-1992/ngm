@@ -1,0 +1,30 @@
+# Local-only secrets / environment notes — NEVER commit
+example server detail.txt
+*.secret
+*.env
+.env*
+/.local/
+
+# Build outputs
+/dist/
+/bin/
+/web/dist/*
+!/web/dist/.gitkeep
+/web/node_modules/
+/coverage/
+*.test
+*.out
+
+# Runtime state from local dev
+/devdata/
+*.db
+*.db-wal
+*.db-shm
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# dev helper deps
+/scripts/remote/node_modules/

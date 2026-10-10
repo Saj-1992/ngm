@@ -1,0 +1,180 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24", cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        with: { name: web-dist, path: web/dist }
+
+  go:
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/download-artifact@v4
+        with: { name: web-dist, path: web/dist }
+      - name: vet + gofmt
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)"
+      - name: test
+        env: { CGO_ENABLED: "0" }
+        run: go test -race=false -count=1 ./...
+      - name: cross-build
+        env: { CGO_ENABLED: "0" }
+        run: |
+          GOOS=linux GOARCH=amd64 go build -trimpath -o dist/ngm-linux-amd64 ./cmd/ngm
+          GOOS=linux GOARCH=arm64 go build -trimpath -o dist/ngm-linux-arm64 ./cmd/ngm
+
+  security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - name: govulncheck (reachable Go vulnerabilities fail the build)
+        run: |
+          mkdir -p web/dist && touch web/dist/.gitkeep
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: npm audit (production dependencies, high and above)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
+  # Fresh install + lifecycle on disposable hosts (MASTER_SPEC §18.1, §18.16):
+  # every supported Ubuntu release × architecture, then uninstall for real.
+  install:
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/download-artifact@v4
+        with: { name: web-dist, path: web/dist }
+      - name: build
+        env: { CGO_ENABLED: "0" }
+        run: go build -trimpath -ldflags "-X github.com/ngm-gateway/ngm/internal/buildinfo.Version=0.0.0-ci" -o ngm ./cmd/ngm
+      - name: machine identity
+        run: |
+          uname -a; cat /etc/os-release | head -4; nproc; free -m | sed -n 2p
+      - name: fresh install
+        run: |
+          echo "# third-party file NGM must never touch" | sudo tee /etc/third-party-marker >/dev/null
+          sudo ./ngm install 2>&1 | tee install.log
+          grep -q "installed" install.log
+          sudo mkdir -p /etc/nginx/conf.d && echo "# third-party" | sudo tee /etc/nginx/conf.d/zz-thirdparty.conf
+          sudo nginx -t
+      - name: smoke
+        run: |
+          sleep 20
+          curl -s -w ' HTTP %{http_code}' http://127.0.0.1:9999/api/v1/system/health; echo
+          systemctl is-active ngm-api ngm-ops ngm-helper ngm-monitor ngm-log-indexer nginx || true
+          sudo ngm status || true
+          sudo ngm doctor || true
+          sudo journalctl -u ngm-ops -u ngm-helper --no-pager -n 30 || true
+          sudo test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9999/api/v1/system/health)" = 200
+          sudo ngm status
+          sudo ngm doctor || true
+          sudo ngm config test
+          systemctl is-active ngm-api ngm-ops ngm-helper ngm-monitor ngm-log-indexer nginx
+          sudo ngm update status
+      - name: uninstall keep-data, then reinstall
+        run: |
+          sudo ngm uninstall --keep-data --yes
+          sudo test ! -e /opt/ngm && sudo test ! -e /usr/local/bin/ngm
+          sudo test -d /var/lib/ngm && sudo test -f /etc/ngm/ngm.json
+          sudo test -f /etc/nginx/conf.d/zz-thirdparty.conf
+          sudo nginx -t && systemctl is-active nginx
+          sudo ./ngm install --adopt-existing-nginx 2>&1 | tail -3
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:9999/api/v1/system/health >/dev/null && break; sleep 2; done
+          curl -fs http://127.0.0.1:9999/api/v1/system/health >/dev/null
+      - name: backup before purge
+        run: |
+          echo "ci-backup-passphrase-0123456789" | sudo ngm backup set-passphrase
+          sudo ngm backup create | tee backup.log
+          sudo sh -c 'cp "$(ls -t /var/lib/ngm/backups/*.ngmbak | head -1)" /root/ci.ngmbak'
+          sudo sh -c 'sha256sum /etc/ngm/keys/kek-*.key' | tee kek-before.txt
+          sudo ngm audit verify | tee audit-before.txt
+      - name: purge
+        run: |
+          sudo ngm uninstall --purge --yes --confirm "purge $(hostname)"
+          for p in /opt/ngm /etc/ngm /var/lib/ngm /var/log/ngm /etc/nginx/ngm /var/www/ngm /etc/nginx/conf.d/ngm.conf; do sudo test ! -e "$p" || { echo "left: $p"; exit 1; }; done
+          ! getent passwd ngm-api && ! getent group ngm
+          sudo test -f /etc/nginx/conf.d/zz-thirdparty.conf && sudo test -f /etc/third-party-marker
+          sudo nginx -t && systemctl is-active nginx
+      - name: restore onto the freshly installed host (new KEK = cross-host rekey)
+        run: |
+          sudo ./ngm install --adopt-existing-nginx 2>&1 | tail -2
+          sudo sh -c 'sha256sum /etc/ngm/keys/kek-*.key' | tee kek-after.txt
+          ! diff -q <(cut -d' ' -f1 kek-before.txt) <(cut -d' ' -f1 kek-after.txt)
+          echo "ci-backup-passphrase-0123456789" | sudo ngm restore --preview /root/ci.ngmbak
+          echo "ci-backup-passphrase-0123456789" | sudo ngm restore --apply /root/ci.ngmbak 2>&1 | tail -5
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:9999/api/v1/system/health >/dev/null && break; sleep 2; done
+          sudo ngm doctor | grep -E 'vault|audit|database'
+          sudo ngm doctor | grep -F '[PASS] vault '
+          sudo ngm audit verify
+
+
+  # Coordinated Nginx APT upgrade with real package changes (§16, §18.14):
+  # start from the Ubuntu 24.04 release-day nginx (snapshot archive), then let NGM upgrade it.
+  nginx-upgrade:
+    needs: web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/download-artifact@v4
+        with: { name: web-dist, path: web/dist }
+      - name: build
+        env: { CGO_ENABLED: "0" }
+        run: go build -trimpath -o ngm ./cmd/ngm
+      - name: old nginx from the release-day snapshot
+        run: |
+          echo "deb [check-valid-until=no] https://snapshot.ubuntu.com/ubuntu/20240430T000000Z noble main universe" | sudo tee /etc/apt/sources.list.d/release-day.list
+          sudo apt-get update -q
+          V=1.24.0-2ubuntu7
+          sudo apt-get install -y -q --allow-downgrades nginx=$V nginx-common=$V libnginx-mod-stream=$V
+          sudo rm /etc/apt/sources.list.d/release-day.list && sudo apt-get update -q
+          dpkg-query -W nginx nginx-common libnginx-mod-stream | tee before.txt
+      - name: install NGM on the old nginx
+        run: |
+          sudo ./ngm install 2>&1 | tail -3
+          for i in $(seq 1 30); do test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9999/api/v1/system/health)" = 200 && break; sleep 2; done
+      - name: coordinated upgrade
+        run: |
+          sudo ngm nginx upgrade 2>&1 | tee plan.txt || true
+          grep -q "→" plan.txt
+          sudo ngm nginx upgrade --yes 2>&1 | tee upgrade.txt
+          grep -q "accepted Nginx" upgrade.txt
+          dpkg-query -W nginx nginx-common libnginx-mod-stream | tee after.txt
+          ! diff -q before.txt after.txt
+          sudo nginx -t && systemctl is-active nginx
+          sleep 5
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9999/api/v1/system/health)" = 200

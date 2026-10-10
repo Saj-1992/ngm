@@ -1,0 +1,40 @@
+# NGM operations worker: jobs, deployment coordination, runtime observation.
+[Unit]
+Description=NGM operations worker
+After=network-online.target ngm-helper.service
+Wants=ngm-helper.service
+
+[Service]
+Type=simple
+ExecStart=/opt/ngm/current/ngm --config /etc/ngm/ngm.json ops
+User=ngm-ops
+Group=ngm
+SupplementaryGroups=ngm-helper ngm-vault
+UMask=0007
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ngm /var/log/ngm
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=256M
+OOMScoreAdjust=300
+
+[Install]
+WantedBy=multi-user.target

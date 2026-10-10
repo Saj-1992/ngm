@@ -1,0 +1,44 @@
+# NGM structured Nginx logs (source of truth for the log explorer; the
+# index under /var/lib/ngm/logindex is rebuildable). Size caps keep disk use
+# bounded; nginx reopens its files on USR1 (no reload, no dropped requests).
+/var/log/ngm/nginx/access.jsonl /var/log/ngm/nginx/stream.jsonl {
+	su root ngm
+	daily
+	rotate 7
+	maxsize 200M
+	missingok
+	notifempty
+	compress
+	delaycompress
+	create 0640 root ngm
+	sharedscripts
+	postrotate
+		[ -s /run/nginx.pid ] && kill -USR1 "$(cat /run/nginx.pid)" || true
+	endscript
+}
+/var/log/ngm/nginx/error.log {
+	su root ngm
+	daily
+	rotate 30
+	maxsize 50M
+	missingok
+	notifempty
+	compress
+	delaycompress
+	create 0640 root ngm
+	sharedscripts
+	postrotate
+		[ -s /run/nginx.pid ] && kill -USR1 "$(cat /run/nginx.pid)" || true
+	endscript
+}
+/var/log/ngm/app/*.jsonl {
+	su root ngm
+	daily
+	rotate 14
+	maxsize 50M
+	missingok
+	notifempty
+	compress
+	delaycompress
+	copytruncate
+}

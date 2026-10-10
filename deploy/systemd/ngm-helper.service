@@ -1,0 +1,43 @@
+# NGM privileged helper: typed, allowlisted operations only (MASTER_SPEC §3).
+[Unit]
+Description=NGM privileged helper
+Documentation=file:///opt/ngm/current/README
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ngm/current/ngm --config /etc/ngm/ngm.json helper
+User=root
+Group=root
+UMask=0077
+Restart=on-failure
+RestartSec=2
+# Hardening that does not break required behaviour (re-evaluated as operations are added).
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# O-5: further hardening. Not used: ProtectKernelTunables (ufw writes sysctls) and
+# ProtectSystem=full (the helper owns files under /etc/nginx and /etc/ufw).
+ProtectSystem=true
+ProtectControlGroups=yes
+PrivateDevices=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_KILL CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE
+MemoryMax=128M
+OOMScoreAdjust=200
+
+[Install]
+WantedBy=multi-user.target

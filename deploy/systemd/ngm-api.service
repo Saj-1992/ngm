@@ -1,0 +1,39 @@
+# NGM control-plane API and Control Center (loopback only; Nginx fronts it).
+[Unit]
+Description=NGM API
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ngm/current/ngm --config /etc/ngm/ngm.json api
+User=ngm-api
+Group=ngm
+SupplementaryGroups=ngm-vault
+UMask=0007
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ngm /var/log/ngm
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=384M
+OOMScoreAdjust=300
+
+[Install]
+WantedBy=multi-user.target

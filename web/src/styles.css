@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/vazirmatn";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens: semantic layer over primitives (light). */
+:root {
+  --bg: oklch(0.985 0.002 260);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.967 0.004 260);
+  --border: oklch(0.912 0.006 260);
+  --fg: oklch(0.21 0.02 265);
+  --fg-muted: oklch(0.5 0.02 265);
+  --accent: oklch(0.52 0.17 262);
+  --accent-fg: oklch(0.99 0 0);
+  --accent-soft: oklch(0.95 0.03 262);
+  --ring: oklch(0.6 0.17 262);
+  --ok: oklch(0.46 0.13 155);
+  --ok-soft: oklch(0.95 0.05 155);
+  --warn: oklch(0.5 0.12 70);
+  --warn-soft: oklch(0.96 0.06 85);
+  --bad: oklch(0.5 0.19 27);
+  --bad-soft: oklch(0.95 0.04 27);
+  --unknown: oklch(0.47 0.02 265);
+  --unknown-soft: oklch(0.94 0.006 265);
+  --shadow: 0 1px 2px oklch(0.2 0.02 265 / 0.06), 0 4px 16px oklch(0.2 0.02 265 / 0.05);
+}
+
+.dark {
+  --bg: oklch(0.16 0.012 265);
+  --surface: oklch(0.2 0.014 265);
+  --surface-2: oklch(0.24 0.016 265);
+  --border: oklch(0.3 0.016 265);
+  --fg: oklch(0.95 0.005 265);
+  --fg-muted: oklch(0.7 0.015 265);
+  --accent: oklch(0.68 0.15 262);
+  --accent-fg: oklch(0.16 0.02 265);
+  --accent-soft: oklch(0.3 0.06 262);
+  --ring: oklch(0.7 0.15 262);
+  --ok: oklch(0.72 0.15 155);
+  --ok-soft: oklch(0.3 0.06 155);
+  --warn: oklch(0.8 0.14 80);
+  --warn-soft: oklch(0.32 0.06 80);
+  --bad: oklch(0.7 0.17 27);
+  --bad-soft: oklch(0.32 0.07 27);
+  --unknown: oklch(0.7 0.015 265);
+  --unknown-soft: oklch(0.28 0.012 265);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 4px 16px oklch(0 0 0 / 0.25);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-ring: var(--ring);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-unknown: var(--unknown);
+  --color-unknown-soft: var(--unknown-soft);
+  --shadow-card: var(--shadow);
+  --font-sans: "Inter Variable", "Vazirmatn Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-fa: "Vazirmatn Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+html[lang="fa"] {
+  font-family: var(--font-fa);
+}
+body {
+  min-height: 100dvh;
+}
+
+/* Technical tokens (IPs, domains, URLs, config) stay LTR in RTL context. */
+.ltr-island {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

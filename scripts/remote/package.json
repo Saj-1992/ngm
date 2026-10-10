@@ -1,0 +1,6 @@
+{
+  "name": "ngm-remote-dev",
+  "private": true,
+  "description": "Dev-only helpers to run NGM integration tests on the owner's test VM. Credentials are read at runtime from a git-ignored local file.",
+  "dependencies": { "ssh2": "^1.17.0" }
+}

@@ -1,0 +1,85 @@
+#!/bin/sh
+# NGM bootstrap installer.
+#
+# It downloads a release (or reads a local directory), verifies the Ed25519
+# signature of manifest.json against the publisher key(s) PINNED IN THIS FILE,
+# checks the binary's SHA-256 from the signed manifest, and only then runs
+# `ngm install`, which verifies everything again with the keys pinned in the
+# binary. Any failure stops before anything is changed (fail closed).
+#
+# Compare the key fingerprint printed below with the one published in the
+# NGM release notes (a different channel than this download), or set
+# NGM_EXPECT_KEY=sha256:<hex> to make this script enforce it.
+#
+# One-line install (downloads the latest signed release from GitHub):
+#   curl -fsSL @@DEFAULT_SRC@@/install.sh | sudo sh
+# Or pin a source: sh install.sh --from https://host/path | /local/release/dir [--adopt-existing-nginx]
+set -eu
+
+# Default download source (the latest GitHub release); over/under --from.
+SRC="@@DEFAULT_SRC@@"
+PASS=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--from) SRC="${2:-}"; shift 2 ;;
+	--adopt-existing-nginx) PASS="$PASS $1"; shift ;;
+	*) echo "unknown argument: $1" >&2; exit 2 ;;
+	esac
+done
+case "$SRC" in
+"" | "@@DEFAULT_SRC@@") echo "no download source: pass --from URL|DIR" >&2; exit 2 ;;
+esac
+[ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
+for c in openssl sha256sum base64 awk; do
+	command -v "$c" >/dev/null 2>&1 || { echo "missing required tool: $c" >&2; exit 1; }
+done
+case "$(uname -m)" in
+x86_64) ARCH=amd64 ;;
+aarch64 | arm64) ARCH=arm64 ;;
+*) echo "unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
+
+TMP=$(mktemp -d /tmp/ngm-install.XXXXXX)
+trap 'rm -rf "$TMP"' EXIT INT TERM
+chmod 700 "$TMP"
+
+fetch() { # name
+	case "$SRC" in
+	https://*)
+		command -v curl >/dev/null 2>&1 || { echo "curl is required for downloads" >&2; exit 1; }
+		curl -fsSL --proto '=https' --tlsv1.2 --max-filesize 209715200 -o "$TMP/$1" "$SRC/$1" ;;
+	http://*) echo "refusing plain-HTTP download source" >&2; exit 1 ;;
+	*) cp "$SRC/$1" "$TMP/$1" ;;
+	esac
+}
+fetch manifest.json
+fetch manifest.sig
+fetch "ngm-linux-$ARCH"
+
+# ---- pinned publisher keys (generated at release time) ----
+@@PINNED_KEYS@@
+# ------------------------------------------------------------
+
+base64 -d "$TMP/manifest.sig" >"$TMP/sig.bin" 2>/dev/null || { echo "FAILED: signature is not valid base64" >&2; exit 1; }
+OK=""
+for k in "$TMP"/key-*.pem; do
+	FP=$(openssl pkey -pubin -in "$k" -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
+	if [ -n "${NGM_EXPECT_KEY:-}" ] && [ "sha256:$FP" != "$NGM_EXPECT_KEY" ]; then
+		continue
+	fi
+	if openssl pkeyutl -verify -pubin -inkey "$k" -rawin -in "$TMP/manifest.json" -sigfile "$TMP/sig.bin" >/dev/null 2>&1; then
+		OK="$FP"
+		break
+	fi
+done
+[ -n "$OK" ] || { echo "FAILED: manifest signature does not verify against any pinned publisher key; nothing was installed" >&2; exit 1; }
+echo "manifest signature OK (publisher key sha256:$OK)"
+
+WANT=$(awk -v f="\"ngm-linux-$ARCH\"" '$1=="\"file\":" && $2==f"," {hit=1} hit && $1=="\"sha256\":" {gsub(/[",]/,"",$2); print $2; exit}' "$TMP/manifest.json")
+GOT=$(sha256sum "$TMP/ngm-linux-$ARCH" | awk '{print $1}')
+[ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { echo "FAILED: ngm-linux-$ARCH digest $GOT does not match the signed manifest ($WANT); nothing was installed" >&2; exit 1; }
+echo "binary digest OK ($GOT)"
+
+chmod 0755 "$TMP/ngm-linux-$ARCH"
+# shellcheck disable=SC2086
+"$TMP/ngm-linux-$ARCH" install --release-dir "$TMP" $PASS

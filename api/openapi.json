@@ -1,0 +1,6015 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NGM — Nginx Gateway Manager API",
+    "version": "1.0.0-dev",
+    "description": "Versioned control-plane API. See API_CONTRACT.md for conventions (errors, ETag/If-Match, Idempotency-Key, pagination, SSE)."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "request_id",
+              "retryable"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Component": {
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "observed_at"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "down",
+              "unknown",
+              "disabled"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "components",
+          "observed_at"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "down",
+              "unknown"
+            ]
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Component"
+            }
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Version": {
+        "type": "object",
+        "required": [
+          "version",
+          "api_version",
+          "schema_version",
+          "channel"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "build_date": {
+            "type": "string"
+          },
+          "api_version": {
+            "type": "string"
+          },
+          "go_version": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "arch": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          }
+        }
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Validating",
+          "ImpactAnalyzed",
+          "Staging",
+          "Preflight",
+          "Applying",
+          "Verifying",
+          "Succeeded",
+          "Blocked",
+          "Failed",
+          "Compensating",
+          "RolledBack",
+          "RecoveryRequired",
+          "Cancelled"
+        ]
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "lock_set",
+          "payload",
+          "attempts",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "base_revision": {
+            "type": "integer"
+          },
+          "lock_set": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "payload": {},
+          "result": {},
+          "error": {},
+          "attempts": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JobPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "JobStep": {
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "name",
+          "class",
+          "status",
+          "evidence",
+          "started_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "from_state": {
+            "type": "string"
+          },
+          "to_state": {
+            "type": "string"
+          },
+          "class": {
+            "enum": [
+              "idempotent",
+              "external"
+            ]
+          },
+          "status": {
+            "enum": [
+              "started",
+              "completed",
+              "failed",
+              "compensated"
+            ]
+          },
+          "fencing_token": {
+            "type": "integer"
+          },
+          "evidence": {},
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Stage": {
+        "enum": [
+          "mfa_enroll",
+          "pending_mfa",
+          "active"
+        ]
+      },
+      "StageResponse": {
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          }
+        }
+      },
+      "Grant": {
+        "type": "object",
+        "required": [
+          "role_id"
+        ],
+        "properties": {
+          "role_id": {
+            "type": "string"
+          },
+          "role_name": {
+            "type": "string"
+          },
+          "scope_kind": {
+            "enum": [
+              "global",
+              "website",
+              "route",
+              "domain"
+            ]
+          },
+          "scope_id": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "status",
+          "locale",
+          "mfa_enabled",
+          "revision",
+          "grants"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "fa"
+            ]
+          },
+          "mfa_enabled": {
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            }
+          }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "builtin",
+          "permissions",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "RoleInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "APIToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatedToken": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/APIToken"
+          },
+          {
+            "type": "object",
+            "required": [
+              "token"
+            ],
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Shown exactly once"
+              }
+            }
+          }
+        ]
+      },
+      "Code": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "target_kind": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "success",
+              "failure",
+              "denied"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "context": {
+            "type": "object"
+          }
+        }
+      },
+      "Listener": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "http",
+              "https",
+              "stream",
+              "stream_tls_front"
+            ]
+          },
+          "address": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "family": {
+            "enum": [
+              "ipv4",
+              "ipv6"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "http2": {
+                "type": "boolean"
+              }
+            }
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      },
+      "ListenerInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "address",
+          "port"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "http",
+              "https",
+              "stream",
+              "stream_tls_front"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "IP literal; 0.0.0.0 or :: for all"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "object"
+          }
+        }
+      },
+      "Endpoint": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "transport": {
+            "enum": [
+              "http",
+              "https",
+              "tcp"
+            ]
+          },
+          "tls_verify": {
+            "type": "boolean"
+          },
+          "tls_server_name": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "connect_timeout_ms": {
+            "type": "integer"
+          },
+          "read_timeout_ms": {
+            "type": "integer"
+          },
+          "write_timeout_ms": {
+            "type": "integer"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      },
+      "EndpointInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "host",
+          "port",
+          "transport"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "transport": {
+            "enum": [
+              "http",
+              "https",
+              "tcp"
+            ]
+          },
+          "tls_verify": {
+            "type": "boolean"
+          },
+          "tls_server_name": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "connect_timeout_ms": {
+            "type": "integer"
+          },
+          "read_timeout_ms": {
+            "type": "integer"
+          },
+          "write_timeout_ms": {
+            "type": "integer"
+          },
+          "disabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Pool": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "strategy": {
+            "enum": [
+              "round_robin",
+              "least_conn",
+              "hash",
+              "failover"
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "endpoint_id": {
+                  "type": "string"
+                },
+                "weight": {
+                  "type": "integer"
+                },
+                "backup": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      },
+      "PoolInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "strategy",
+          "members"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Match": {
+        "type": "object",
+        "required": [
+          "field",
+          "operator",
+          "value"
+        ],
+        "properties": {
+          "field": {
+            "enum": [
+              "sni",
+              "alpn",
+              "host",
+              "path_prefix",
+              "path_exact"
+            ]
+          },
+          "operator": {
+            "enum": [
+              "exact",
+              "wildcard",
+              "prefix"
+            ]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Route": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "listener_id": {
+            "type": "string"
+          },
+          "protocol": {
+            "enum": [
+              "http",
+              "tcp",
+              "tls_passthrough",
+              "tls_terminate_http"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "destination_kind": {
+            "enum": [
+              "pool",
+              "endpoint",
+              "website",
+              "redirect",
+              "reject"
+            ]
+          },
+          "destination_id": {
+            "type": "string"
+          },
+          "is_fallback": {
+            "type": "boolean"
+          },
+          "certificate_id": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Match"
+            }
+          },
+          "options": {
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      },
+      "RouteInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "listener_id",
+          "protocol",
+          "destination_kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "listener_id": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "destination_kind": {
+            "type": "string"
+          },
+          "destination_id": {
+            "type": "string"
+          },
+          "is_fallback": {
+            "type": "boolean"
+          },
+          "certificate_id": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Match"
+            }
+          },
+          "options": {
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Certificate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sans": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "not_before": {
+            "type": "string"
+          },
+          "not_after": {
+            "type": "string"
+          },
+          "fingerprint_sha256": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "has_key": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      },
+      "Issue": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        }
+      },
+      "SimInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "enum": [
+              "desired",
+              "active"
+            ]
+          },
+          "listener_id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "sni": {
+            "type": "string"
+          },
+          "alpn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "host": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "ech": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JobAccepted": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FirewallRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "allow",
+              "deny",
+              "limit"
+            ]
+          },
+          "proto": {
+            "enum": [
+              "tcp",
+              "udp",
+              "any"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "active_state": {
+            "enum": [
+              "present",
+              "absent",
+              "unknown"
+            ]
+          },
+          "revision": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Standard error envelope",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "JobID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "ETag of the current revision, e.g. \"r3\""
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/system/health": {
+      "get": {
+        "operationId": "getHealth",
+        "x-ngm-permission": "",
+        "summary": "Aggregate health. Anonymous callers receive status only; component detail requires system.read.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/version": {
+      "get": {
+        "operationId": "getVersion",
+        "x-ngm-permission": "system.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "listJobs",
+        "x-ngm-permission": "jobs.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/JobState"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{id}": {
+      "get": {
+        "operationId": "getJob",
+        "x-ngm-permission": "jobs.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/JobID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{id}/steps": {
+      "get": {
+        "operationId": "getJobSteps",
+        "x-ngm-permission": "jobs.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/JobID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/JobStep"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "streamEvents",
+        "x-ngm-permission": "events.read",
+        "summary": "Server-Sent Events stream with Last-Event-ID replay, resync on gaps, 15s heartbeat, scope-filtered.",
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/setup/status": {
+      "get": {
+        "operationId": "getSetupStatus",
+        "x-ngm-permission": "",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "First-run wizard progress. Public; preflight details only with system.read."
+      }
+    },
+    "/api/v1/setup/owner": {
+      "post": {
+        "operationId": "createOwner",
+        "x-ngm-permission": "",
+        "responses": {
+          "201": {
+            "description": "Created; session cookies set (stage mfa_enroll)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Create the first Owner. Direct loopback (local/SSH tunnel) only; requires the installer bootstrap token; only while no user exists.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bootstrap_token",
+                  "username",
+                  "password"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "bootstrap_token": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "locale": {
+                    "enum": [
+                      "en",
+                      "fa"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login",
+        "x-ngm-permission": "",
+        "responses": {
+          "200": {
+            "description": "Session cookies set; MFA still required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "x-ngm-permission": "@session",
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "getSession",
+        "x-ngm-permission": "@session",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object"
+                    },
+                    "stage": {
+                      "$ref": "#/components/schemas/Stage"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "step_up_until": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "operationId": "beginMfaEnroll",
+        "x-ngm-permission": "@enroll",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "otpauth_uri": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Create a pending TOTP secret (mfa_enroll stage only)."
+      }
+    },
+    "/api/v1/auth/mfa/confirm": {
+      "post": {
+        "operationId": "confirmMfaEnroll",
+        "x-ngm-permission": "@enroll",
+        "responses": {
+          "200": {
+            "description": "Session rotated to active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Code"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "operationId": "verifyMfa",
+        "x-ngm-permission": "@pending",
+        "responses": {
+          "200": {
+            "description": "Session rotated to active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Code"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/step-up": {
+      "post": {
+        "operationId": "stepUp",
+        "x-ngm-permission": "@active",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "step_up_until": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Code"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "changePassword",
+        "x-ngm-permission": "@active",
+        "responses": {
+          "204": {
+            "description": "Changed; other sessions revoked"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "current_password",
+                  "new_password"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "current_password": {
+                    "type": "string"
+                  },
+                  "new_password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "listUsers",
+        "x-ngm-permission": "users.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUser",
+        "x-ngm-permission": "users.write",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "locale": {
+                    "enum": [
+                      "en",
+                      "fa"
+                    ]
+                  },
+                  "grants": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Grant"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "getUser",
+        "x-ngm-permission": "users.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "updateUser",
+        "x-ngm-permission": "users.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "active",
+                      "disabled"
+                    ]
+                  },
+                  "locale": {
+                    "enum": [
+                      "en",
+                      "fa"
+                    ]
+                  },
+                  "grants": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Grant"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUser",
+        "x-ngm-permission": "users.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}/mfa-reset": {
+      "post": {
+        "operationId": "resetUserMfa",
+        "x-ngm-permission": "users.write",
+        "responses": {
+          "204": {
+            "description": "MFA cleared; sessions revoked"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/permissions": {
+      "get": {
+        "operationId": "listPermissions",
+        "x-ngm-permission": "roles.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "step_up": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "operationId": "listRoles",
+        "x-ngm-permission": "roles.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRole",
+        "x-ngm-permission": "roles.write",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/roles/{id}": {
+      "get": {
+        "operationId": "getRole",
+        "x-ngm-permission": "roles.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updateRole",
+        "x-ngm-permission": "roles.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRole",
+        "x-ngm-permission": "roles.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/tokens": {
+      "get": {
+        "operationId": "listTokens",
+        "x-ngm-permission": "tokens.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/APIToken"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createToken",
+        "x-ngm-permission": "tokens.write",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedToken"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "scopes"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expires_in_days": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 366
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens/{id}": {
+      "delete": {
+        "operationId": "revokeToken",
+        "x-ngm-permission": "tokens.write",
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/audit": {
+      "get": {
+        "operationId": "listAudit",
+        "x-ngm-permission": "audit.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditEvent"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "success",
+                "failure",
+                "denied"
+              ]
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/audit/verify": {
+      "get": {
+        "operationId": "verifyAudit",
+        "x-ngm-permission": "audit.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "integer"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "broken_at_seq": {
+                      "type": "integer"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/secrets": {
+      "get": {
+        "operationId": "listSecrets",
+        "x-ngm-permission": "secrets.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Secret metadata only. Values are never returned (no read-back)."
+      }
+    },
+    "/api/v1/listeners": {
+      "get": {
+        "operationId": "listListeners",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Listener"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createListener",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "201": {
+            "description": "Created (desired state only; deploy to apply)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listener"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListenerInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listeners/{id}": {
+      "get": {
+        "operationId": "getListener",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listener"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updateListener",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listener"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListenerInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteListener",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/backends": {
+      "get": {
+        "operationId": "listBackends",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Endpoint"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBackend",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "201": {
+            "description": "Created (desired state only; deploy to apply)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backends/{id}": {
+      "get": {
+        "operationId": "getBackend",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updateBackend",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBackend",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/pools": {
+      "get": {
+        "operationId": "listPools",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Pool"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPool",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "201": {
+            "description": "Created (desired state only; deploy to apply)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pool"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pools/{id}": {
+      "get": {
+        "operationId": "getPool",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pool"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updatePool",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pool"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePool",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/routes": {
+      "get": {
+        "operationId": "listRoutes",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Route"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoute",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "201": {
+            "description": "Created (desired state only; deploy to apply)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/routes/{id}": {
+      "get": {
+        "operationId": "getRoute",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updateRoute",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoute",
+        "x-ngm-permission": "gateway.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/certificates": {
+      "get": {
+        "operationId": "listCertificates",
+        "x-ngm-permission": "certificates.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Certificate"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "importCertificate",
+        "x-ngm-permission": "certificates.write",
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Import PEM chain + key. The key is stored in the vault and never returned.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "cert_pem",
+                  "key_pem"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "cert_pem": {
+                    "type": "string"
+                  },
+                  "key_pem": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/certificates/self-signed": {
+      "post": {
+        "operationId": "createSelfSignedCertificate",
+        "x-ngm-permission": "certificates.write",
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "hosts",
+                  "days"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "hosts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 825
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/certificates/{id}": {
+      "get": {
+        "operationId": "getCertificate",
+        "x-ngm-permission": "certificates.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteCertificate",
+        "x-ngm-permission": "certificates.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/gateway/validation": {
+      "get": {
+        "operationId": "validateGateway",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Issue"
+                      }
+                    },
+                    "capabilities": {
+                      "type": "object"
+                    },
+                    "preview": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "preview",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "summary": "Validate the desired model; with preview=1 also return the generated read-only Nginx configuration (secrets redacted)."
+      }
+    },
+    "/api/v1/gateway/simulate": {
+      "post": {
+        "operationId": "simulateRoute",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object"
+                    },
+                    "model_valid": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Route Simulation Lab: evaluate a hypothetical connection against the compiled desired or active model. Models compiled configuration only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deployments": {
+      "get": {
+        "operationId": "listDeployments",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "applyGateway",
+        "x-ngm-permission": "deploy.apply",
+        "responses": {
+          "202": {
+            "description": "Safe Apply job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Desired model has validation errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "disable_distro_default_site": {
+                    "type": "boolean"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deployments/active": {
+      "get": {
+        "operationId": "getActiveDeployment",
+        "x-ngm-permission": "gateway.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/deployments/rollback": {
+      "post": {
+        "operationId": "rollbackGateway",
+        "x-ngm-permission": "deploy.apply",
+        "responses": {
+          "202": {
+            "description": "Rollback job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "generation_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "generation_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/monitoring/backends": {
+      "get": {
+        "operationId": "getBackendHealth",
+        "x-ngm-permission": "monitoring.read",
+        "summary": "Latest active health-check evidence per endpoint; stale evidence is reported as unknown.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "endpoint_id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "enum": [
+                              "healthy",
+                              "degraded",
+                              "down",
+                              "unknown",
+                              "disabled"
+                            ]
+                          },
+                          "latency_ms": {
+                            "type": "integer"
+                          },
+                          "detail": {
+                            "type": "string"
+                          },
+                          "observed_at": {
+                            "type": "string"
+                          },
+                          "stale": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/firewall": {
+      "get": {
+        "operationId": "getFirewall",
+        "x-ngm-permission": "firewall.read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FirewallRule"
+                      }
+                    },
+                    "observed": {
+                      "type": "object"
+                    },
+                    "observed_at": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Desired NGM-owned UFW rules and the latest observed UFW state (foreign rules listed, never modified)."
+      }
+    },
+    "/api/v1/firewall/rules": {
+      "post": {
+        "operationId": "createFirewallRule",
+        "x-ngm-permission": "firewall.write",
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirewallRule"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "action",
+                  "proto",
+                  "port"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string"
+                  },
+                  "proto": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/firewall/rules/from-listeners": {
+      "post": {
+        "operationId": "firewallRulesFromListeners",
+        "x-ngm-permission": "firewall.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/firewall/rules/{id}": {
+      "delete": {
+        "operationId": "deleteFirewallRule",
+        "x-ngm-permission": "firewall.write",
+        "responses": {
+          "204": {
+            "description": "Marked for removal on next apply"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ]
+      }
+    },
+    "/api/v1/firewall/apply": {
+      "post": {
+        "operationId": "applyFirewall",
+        "x-ngm-permission": "firewall.write",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Apply desired rules (and optionally enable UFW). Risky changes arm a dead-man watchdog and wait for /firewall/confirm.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enable": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/firewall/confirm": {
+      "post": {
+        "operationId": "confirmFirewall",
+        "x-ngm-permission": "firewall.write",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "confirmed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "job_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "job_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups": {
+      "get": {
+        "operationId": "listBackups",
+        "x-ngm-permission": "backups.read",
+        "responses": {
+          "200": {
+            "description": "Complete archives, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBackup",
+        "x-ngm-permission": "backups.create",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Queue an encrypted local backup (409 no_passphrase until a passphrase is set)."
+      }
+    },
+    "/api/v1/backups/settings": {
+      "get": {
+        "operationId": "getBackupSettings",
+        "x-ngm-permission": "backups.read",
+        "responses": {
+          "200": {
+            "description": "Passphrase state, schedule and local-storage warning",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/backups/schedule": {
+      "put": {
+        "operationId": "putBackupSchedule",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "200": {
+            "description": "Stored schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "enabled",
+                  "interval_hours",
+                  "retain"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "interval_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 720
+                  },
+                  "retain": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/passphrase": {
+      "post": {
+        "operationId": "setBackupPassphrase",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "200": {
+            "description": "Derived archive key stored in the vault; the passphrase itself is never stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "passphrase"
+                ],
+                "properties": {
+                  "passphrase": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 1024,
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{id}/download": {
+      "get": {
+        "operationId": "downloadBackup",
+        "x-ngm-permission": "backups.create",
+        "responses": {
+          "200": {
+            "description": "Encrypted archive",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/backups/{id}/verify": {
+      "post": {
+        "operationId": "verifyBackup",
+        "x-ngm-permission": "backups.read",
+        "responses": {
+          "200": {
+            "description": "Archive decrypts, hashes match, database passes integrity_check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/backups/{id}": {
+      "delete": {
+        "operationId": "deleteBackup",
+        "x-ngm-permission": "backups.create",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/recovery/incidents": {
+      "get": {
+        "operationId": "listIncidents",
+        "x-ngm-permission": "recovery.read",
+        "responses": {
+          "200": {
+            "description": "Incidents with guided manual actions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/recovery/incidents/{id}": {
+      "get": {
+        "operationId": "getIncident",
+        "x-ngm-permission": "recovery.read",
+        "responses": {
+          "200": {
+            "description": "Incident with job and journaled steps",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/recovery/incidents/{id}/resolve": {
+      "post": {
+        "operationId": "resolveIncident",
+        "x-ngm-permission": "recovery.write",
+        "responses": {
+          "200": {
+            "description": "Resolved incident",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Supervised resolution: the operator attests the outcome after manual checks (step-up MFA).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "outcome",
+                  "note"
+                ],
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "rolled_back",
+                      "failed",
+                      "succeeded"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recovery/incidents/{id}/reconcile": {
+      "post": {
+        "operationId": "reconcileIncident",
+        "x-ngm-permission": "recovery.write",
+        "summary": "Supervised reconcile of record/data-plane drift: adopt the serving generation or restore the recorded one; verified by probes, closes the incident on success.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "adopt",
+                      "restore"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/recovery/drift": {
+      "get": {
+        "operationId": "getDrift",
+        "x-ngm-permission": "recovery.read",
+        "responses": {
+          "200": {
+            "description": "Drift between NGM's record and the served generation (null when consistent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/recovery/reconcile": {
+      "post": {
+        "operationId": "reconcileDrift",
+        "x-ngm-permission": "recovery.write",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "adopt",
+                      "restore"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/domains": {
+      "get": {
+        "operationId": "listDomains",
+        "x-ngm-permission": "domains.read",
+        "responses": {
+          "200": {
+            "description": "Registered domains with DNS evidence status (ok | attention | unknown)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDomain",
+        "x-ngm-permission": "domains.write",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fqdn"
+                ],
+                "properties": {
+                  "fqdn": {
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "management",
+                      "website",
+                      "route"
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/domains/{id}": {
+      "get": {
+        "operationId": "getDomain",
+        "x-ngm-permission": "domains.read",
+        "responses": {
+          "200": {
+            "description": "Domain, expectations, observations (authoritative and resolver), comparison and usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchDomain",
+        "x-ngm-permission": "domains.write",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "purpose"
+                ],
+                "properties": {
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "management",
+                      "website",
+                      "route"
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDomain",
+        "x-ngm-permission": "domains.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "summary": "Refused with 409 while routes, certificates or the management origin use the domain."
+      }
+    },
+    "/api/v1/domains/{id}/expectations": {
+      "post": {
+        "operationId": "addExpectation",
+        "x-ngm-permission": "domains.write",
+        "responses": {
+          "201": {
+            "description": "Domain with the new expectation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "A",
+                      "AAAA",
+                      "CNAME",
+                      "CAA",
+                      "NS",
+                      "TXT"
+                    ]
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "ttl": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 604800
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/domains/{id}/expectations/{eid}": {
+      "delete": {
+        "operationId": "deleteExpectation",
+        "x-ngm-permission": "domains.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "eid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/domains/{id}/check": {
+      "post": {
+        "operationId": "checkDomain",
+        "x-ngm-permission": "domains.read",
+        "responses": {
+          "202": {
+            "description": "Check requested; ngm-monitor performs the DNS lookups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/certificates/acme": {
+      "post": {
+        "operationId": "acmeCertificate",
+        "x-ngm-permission": "certificates.write",
+        "summary": "Order a certificate through ACME HTTP-01 (Let's Encrypt staging or production). Requires a deployed HTTP listener on port 80; wildcards are refused (DNS-01 not implemented).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "identifiers",
+                  "directory"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "identifiers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 50
+                  },
+                  "directory": {
+                    "type": "string",
+                    "enum": [
+                      "letsencrypt-staging",
+                      "letsencrypt"
+                    ]
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/certificates/{id}/renew": {
+      "post": {
+        "operationId": "renewCertificate",
+        "x-ngm-permission": "certificates.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Renew an ACME certificate now (also automatic 30 days before expiry). The renewed certificate is deployed by a Safe Apply if routes use it.",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/cloudflare": {
+      "get": {
+        "operationId": "getCloudflare",
+        "x-ngm-permission": "domains.read",
+        "responses": {
+          "200": {
+            "description": "Whether a token is configured (never returned)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putCloudflare",
+        "x-ngm-permission": "secrets.write",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored in the vault",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCloudflare",
+        "x-ngm-permission": "secrets.write",
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/domains/{id}/cloudflare/preview": {
+      "post": {
+        "operationId": "cloudflarePreview",
+        "x-ngm-permission": "domains.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Queue a read-only plan (creates/updates/conflicts; external records untouched).",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/domains/{id}/cloudflare/apply": {
+      "post": {
+        "operationId": "cloudflareApply",
+        "x-ngm-permission": "domains.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Apply exactly the previewed plan (plan_hash); conflicts change only if adopted explicitly.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "plan_hash"
+                ],
+                "properties": {
+                  "plan_hash": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 32
+                  },
+                  "adopt": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/websites/templates": {
+      "get": {
+        "operationId": "websiteTemplates",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Templates and supported locales (with direction)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/websites": {
+      "get": {
+        "operationId": "listWebsites",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Websites",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "201": {
+            "description": "Created (template sites start from starter content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "kind",
+                  "default_locale",
+                  "locales"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "template",
+                      "static_zip"
+                    ]
+                  },
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "landing",
+                      "corporate",
+                      "portfolio",
+                      "documentation",
+                      "blog",
+                      "app_showcase"
+                    ]
+                  },
+                  "default_locale": {
+                    "type": "string"
+                  },
+                  "locales": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/websites/{id}": {
+      "get": {
+        "operationId": "getWebsite",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Website, draft content, validation errors/warnings, routes using it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "default_locale",
+                  "locales"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "default_locale": {
+                    "type": "string"
+                  },
+                  "locales": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Queue removal of published files and the record (409 while routes serve it)."
+      }
+    },
+    "/api/v1/websites/{id}/content": {
+      "put": {
+        "operationId": "putWebsiteContent",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "200": {
+            "description": "Saved draft with validation errors and warnings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "X-Draft-Revision",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/websites/{id}/media": {
+      "get": {
+        "operationId": "listWebsiteMedia",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Media library",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "addWebsiteMedia",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "201": {
+            "description": "Stored (PNG/JPEG/GIF/WebP/AVIF by content; SVG refused)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 5242880
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/websites/{id}/media/{name}": {
+      "get": {
+        "operationId": "getWebsiteMedia",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Image",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteWebsiteMedia",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/websites/{id}/upload": {
+      "post": {
+        "operationId": "uploadWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "201": {
+            "description": "Archive stored; validated by the build job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 52428800
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/websites/{id}/build": {
+      "post": {
+        "operationId": "buildWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/websites/{id}/versions": {
+      "get": {
+        "operationId": "websiteVersions",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Immutable versions, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/websites/{id}/publish": {
+      "post": {
+        "operationId": "publishWebsite",
+        "x-ngm-permission": "websites.write",
+        "responses": {
+          "202": {
+            "description": "Job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "summary": "Publish (or roll back to) a built version: copy, atomic per-site pointer switch, verification through Nginx, compensating rollback.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version_id"
+                ],
+                "properties": {
+                  "version_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/websites/{id}/versions/{vid}/preview": {
+      "post": {
+        "operationId": "previewLink",
+        "x-ngm-permission": "websites.read",
+        "responses": {
+          "200": {
+            "description": "Signed preview URL valid for 30 minutes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "vid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/preview/{id}/{vid}/{token}/{path}": {
+      "get": {
+        "operationId": "previewWebsite",
+        "responses": {
+          "200": {
+            "description": "Built file served with Content-Security-Policy: sandbox (opaque origin)"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "name": "vid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Public but authorised by the expiring signed token in the path.",
+        "x-ngm-permission": ""
+      }
+    },
+    "/api/v1/logs": {
+      "get": {
+        "operationId": "searchLogs",
+        "x-ngm-permission": "logs.read",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "http|stream|error|api|ops|monitor|security|audit|health"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "full-text words"
+          },
+          {
+            "name": "route",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "route id"
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "host"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "404, 5xx, …"
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "info|warn|error"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "id cursor"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "max rows"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entries newest first, next_before cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/logs/export": {
+      "get": {
+        "operationId": "exportLogs",
+        "x-ngm-permission": "logs.read",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "http|stream|error|api|ops|monitor|security|audit|health"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "full-text words"
+          },
+          {
+            "name": "route",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "route id"
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "host"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "404, 5xx, …"
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "info|warn|error"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "id cursor"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "max rows"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "csv|jsonl|txt"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File download (≤ 50,000 rows); audited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/logs/tail": {
+      "get": {
+        "operationId": "tailLogs",
+        "x-ngm-permission": "logs.read",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "http|stream|error|api|ops|monitor|security|audit|health"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "full-text words"
+          },
+          {
+            "name": "route",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "route id"
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "host"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "404, 5xx, …"
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "info|warn|error"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "unix ms"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "id cursor"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "max rows"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/event-stream of new entries (event: log)",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/logs/status": {
+      "get": {
+        "operationId": "logStatus",
+        "x-ngm-permission": "logs.read",
+        "responses": {
+          "200": {
+            "description": "Indexer status (lag per source, pause reason) and retention",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "operationId": "listAlerts",
+        "x-ngm-permission": "monitoring.read",
+        "responses": {
+          "200": {
+            "description": "Alerts (state=open filters)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/alerts/{id}/ack": {
+      "post": {
+        "operationId": "ackAlert",
+        "x-ngm-permission": "alerts.write",
+        "responses": {
+          "204": {
+            "description": "Acknowledged"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/monitoring/system": {
+      "get": {
+        "operationId": "systemMetrics",
+        "x-ngm-permission": "monitoring.read",
+        "responses": {
+          "200": {
+            "description": "Latest sample with freshness and bounded history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 168
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/targets": {
+      "get": {
+        "operationId": "listTargets",
+        "x-ngm-permission": "settings.read",
+        "responses": {
+          "200": {
+            "description": "Targets (secrets never returned)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTarget",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "kind"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "telegram",
+                      "webhook"
+                    ]
+                  },
+                  "chat_id": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "secret": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "min_severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warning",
+                      "critical"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/targets/{id}": {
+      "patch": {
+        "operationId": "patchTarget",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTarget",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/targets/{id}/test": {
+      "post": {
+        "operationId": "testTarget",
+        "x-ngm-permission": "settings.write",
+        "responses": {
+          "202": {
+            "description": "Test delivery queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/deliveries": {
+      "get": {
+        "operationId": "listDeliveries",
+        "x-ngm-permission": "settings.read",
+        "responses": {
+          "200": {
+            "description": "Recent delivery attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/performance": {
+      "get": {
+        "operationId": "getPerf",
+        "x-ngm-permission": "performance.read",
+        "responses": {
+          "200": {
+            "description": "Default/override/effective values per directive"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putPerf",
+        "x-ngm-permission": "performance.write",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "low",
+                      "balanced",
+                      "high"
+                    ]
+                  },
+                  "overrides": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; applied with the next deployment"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/topology": {
+      "get": {
+        "operationId": "getTopology",
+        "x-ngm-permission": "topology.read",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desired",
+                "active"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed graph (bounded to 2000 nodes) with observed status"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/topology/impact": {
+      "get": {
+        "operationId": "getImpact",
+        "x-ngm-permission": "topology.read",
+        "parameters": [
+          {
+            "name": "node",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Affected nodes and critical dependencies"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/system/updates": {
+      "get": {
+        "operationId": "getUpdates",
+        "x-ngm-permission": "system.read",
+        "summary": "Installed releases and the last update attempt (read-only; installing is a root CLI action)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gateway/fallback": {
+      "get": {
+        "operationId": "getFallback",
+        "x-ngm-permission": "gateway.read",
+        "summary": "Fallback website served to unmatched hosts/SNI (ADR-036)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putFallback",
+        "x-ngm-permission": "gateway.write",
+        "summary": "Set or clear the fallback website (applies with the next deployment)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
