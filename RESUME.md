@@ -19,7 +19,7 @@ the next session continues from **Next steps**, the first unchecked item. Do not
 ### 2026-10-12 state
 - [x] Four branded starter sites (ADR-041), seeded + published on the VM (villa-advisory = fallback; sarv-journal, atelier-dena, hamrah-app). Verified live over HTTPS (pages, media, 404, sitemap, robots).
 - [x] Cloudflare zones/subdomain UI + backend committed; migration 0007 applied on the VM (rc.7+).
-- [ ] Ship rc.9 (faq page in corporate starter) → rerun p5_site, p9_decoy, p10_features (p7 skipped by owner), update PROGRESS/TEST_REPORT, push, tag release.
+- [x] rc.9 shipped; p5_site/p9/p10/p8_security/p8_origin green; p7 skipped by owner. Remaining: push + tag need the owner (no GitHub credentials in this session).
 - Note: the full run on rc.6 stopped after p4 (SSH handshake timeout from the dev host); the server was healthy.
 
 ### Master-prompt work 2026-10-11 (state)
