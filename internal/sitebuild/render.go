@@ -173,7 +173,7 @@ func HashFiles(files map[string][]byte) (string, int64) {
 	return hex.EncodeToString(h.Sum(nil)), size
 }
 
-// orderedPages: home first, then pages; blog posts newest first; docs keep order.
+// orderedPages: home first, then pages; posts last, newest first.
 func orderedPages(ps []Page, template string) []Page {
 	out := append([]Page(nil), ps...)
 	// Strict weak order: home first, other pages in authoring order, posts
@@ -272,8 +272,8 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 	fmt.Fprintf(b, "<link rel=\"icon\" href=\"%s\">\n", faviconURI(mark, accent))
 	fmt.Fprintf(b, "<link rel=\"stylesheet\" href=\"%sassets/site.css\">\n</head>\n", p.up)
 	fmt.Fprintf(b, "<body class=\"t-%s\">\n<a class=\"skip\" href=\"#main\">%s</a>\n<header class=\"top\"><div class=\"wrap bar\"><a class=\"brand\" href=\"%s\"><span class=\"mark\" aria-hidden=\"true\">%s</span>%s</a>", in.Template, esc(skipText(loc)), p.href(pagePath(loc, "")), esc(mark), esc(siteTitle))
-	// Navigation (not for single-page landing sites).
-	if in.Template != "landing" && in.Template != "documentation" {
+	// Navigation.
+	{
 		b.WriteString("<nav>")
 		for _, np := range pages {
 			if np.Hidden || np.Slug == "" || np.Kind == "post" {
@@ -298,22 +298,7 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 		b.WriteString("</span>")
 	}
 	b.WriteString("</div></header>\n")
-	if in.Template == "documentation" {
-		b.WriteString("<div class=\"wrap docs\"><aside><nav>")
-		for _, np := range pages {
-			if np.Hidden {
-				continue
-			}
-			cur := ""
-			if np.Slug == pg.Slug {
-				cur = ` aria-current="page"`
-			}
-			fmt.Fprintf(b, "<a href=\"%s\"%s>%s</a>", p.href(pagePath(loc, np.Slug)), cur, esc(p.t(np.Title)))
-		}
-		b.WriteString("</nav></aside><main id=\"main\">\n")
-	} else {
-		b.WriteString("<main class=\"wrap\" id=\"main\">\n")
-	}
+	b.WriteString("<main class=\"wrap\" id=\"main\">\n")
 	if pg.Slug != "" || len(pg.Blocks) == 0 || pg.Blocks[0].Type != "hero" {
 		fmt.Fprintf(b, "<h1>%s</h1>\n", esc(title))
 		if pg.Kind == "post" && pg.Date != "" {
@@ -334,7 +319,7 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 	fmt.Fprintf(b, "<div><strong class=\"fbrand\">%s</strong>%s</div>", esc(siteTitle), paragraphs(p.t(c.Site.Tagline)))
 	b.WriteString("<nav aria-label=\"footer\">")
 	for _, np := range pages {
-		if np.Hidden || np.Slug == "" || np.Kind == "post" || np.Kind == "doc" {
+		if np.Hidden || np.Slug == "" || np.Kind == "post" {
 			continue
 		}
 		fmt.Fprintf(b, "<a href=\"%s\">%s</a>", p.href(pagePath(loc, np.Slug)), esc(p.t(np.Title)))
@@ -521,8 +506,6 @@ section{margin-block:28px}.hero{padding-block:32px}.hero p{font-size:1.15rem;col
 .quote blockquote{font-size:1.2rem;margin:0;border-inline-start:4px solid var(--accent);padding-inline-start:16px}
 .posts ul{list-style:none;padding:0}.posts li{padding-block:10px;border-bottom:1px solid var(--soft)}.date,time{color:var(--muted)}
 .foot{border-top:1px solid var(--soft);padding-block:24px;color:var(--muted);font-size:.9rem}
-.docs{display:grid;grid-template-columns:220px 1fr;gap:32px}.docs aside nav{flex-direction:column;position:sticky;top:16px;padding-block:32px}
-@media (max-width:720px){.docs{grid-template-columns:1fr}.docs aside nav{position:static;padding-block:16px 0}}
 .skip{position:absolute;inset-inline-start:-999px;top:8px;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;z-index:9}.skip:focus{inset-inline-start:8px}
 .mark{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;font-weight:700;margin-inline-end:10px;vertical-align:middle}
 .hero.has-img{display:grid;gap:28px;align-items:center;grid-template-columns:1.1fr 1fr}.hero.has-img img{width:100%}
@@ -539,12 +522,10 @@ section{margin-block:28px}.hero{padding-block:32px}.hero p{font-size:1.15rem;col
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 `
 	extra := map[string]string{
-		"landing":       ".t-landing main{text-align:center}.t-landing .grid{text-align:start}",
-		"corporate":     ".t-corporate .hero{border-radius:var(--radius);background:var(--soft);padding:40px}",
-		"portfolio":     ".t-portfolio .gallery .grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.t-portfolio .gallery li{padding:0;overflow:hidden}.t-portfolio .gallery h3,.t-portfolio .gallery p{padding-inline:16px}",
-		"documentation": ".t-documentation main{min-width:0}.t-documentation h1{font-size:2rem}",
-		"blog":          ".t-blog main{max-width:760px}",
-		"app_showcase":  ".t-app_showcase .hero{display:grid;gap:24px;align-items:center}.t-app_showcase .hero img{max-height:520px;width:auto;justify-self:center}",
+		"corporate":    ".t-corporate .hero{border-radius:var(--radius);background:var(--soft);padding:40px}",
+		"portfolio":    ".t-portfolio .gallery .grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.t-portfolio .gallery li{padding:0;overflow:hidden}.t-portfolio .gallery h3,.t-portfolio .gallery p{padding-inline:16px}",
+		"blog":         ".t-blog main{max-width:760px}",
+		"app_showcase": ".t-app_showcase .hero{display:grid;gap:24px;align-items:center}.t-app_showcase .hero img{max-height:520px;width:auto;justify-self:center}",
 	}[template]
 	return base + extra + "\n"
 }

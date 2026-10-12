@@ -121,7 +121,7 @@ The route compiler MUST understand what information is visible at each layer. **
 ### 6.3 Websites
 
 - Static ZIP upload must enforce archive size, decompression ratio, path normalization, symlink/device-file rejection, file type/size limits, MIME validation, malware-risk handling and strict publish-root isolation.
-- Structured templates: Landing, Corporate, Portfolio, Documentation, Blog, App Showcase. Provide block-based content editor, media management, metadata/SEO, drafts, preview on an isolated origin, deterministic build, versioned publish and rollback.
+- Structured templates: Corporate, Blog, Portfolio, App Showcase (owner decision 2026-10-12, ADR-042: the thin Landing and Documentation starters were removed; the four remaining ones are complete branded sites). Provide block-based content editor, media management, metadata/SEO, drafts, preview on an isolated origin, deterministic build, versioned publish and rollback.
 - Localized sites use path locales (e.g. `/fa/`, `/en/`), hreflang, canonical URLs, locale-aware sitemap, RTL/LTR and per-locale content. Never execute user-uploaded server-side code.
 - Website publish is a persistent job with dependency analysis, build validation, staged files, atomic per-site pointer switch where supported, runtime verification and compensating rollback.
 

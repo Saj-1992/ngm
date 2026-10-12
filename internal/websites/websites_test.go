@@ -28,10 +28,10 @@ func TestTemplateSiteLifecycle(t *testing.T) {
 	if _, err := s.Create(ctx, nil, "x", "template", "nope", "fa", []string{"fa"}); err == nil {
 		t.Fatal("unknown template accepted")
 	}
-	if _, err := s.Create(ctx, nil, "x", "template", "landing", "fa", []string{"en"}); err == nil {
+	if _, err := s.Create(ctx, nil, "x", "template", "corporate", "fa", []string{"en"}); err == nil {
 		t.Fatal("default locale outside locales accepted")
 	}
-	w, err := s.Create(ctx, nil, "Shop", "template", "landing", "fa", []string{"fa", "en"})
+	w, err := s.Create(ctx, nil, "Shop", "template", "corporate", "fa", []string{"fa", "en"})
 	if err != nil || w.Content == nil || len(w.Content.Pages) == 0 {
 		t.Fatalf("%v %+v", err, w)
 	}

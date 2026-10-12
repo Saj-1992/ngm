@@ -25,7 +25,7 @@ export function WebsitesPage() {
   const list = useAsync(web.sites.list);
   const tpls = useAsync(web.sites.templates);
   const [adding, setAdding] = useState(false);
-  const [f, setF] = useState({ name: "", kind: "template", template: "landing", default_locale: "fa", locales: ["fa", "en"] });
+  const [f, setF] = useState({ name: "", kind: "template", template: "corporate", default_locale: "fa", locales: ["fa", "en"] });
   const [err, setErr] = useState<string | null>(null);
   const create = async () => {
     setErr(null);

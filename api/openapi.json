@@ -4713,11 +4713,9 @@
                   "template": {
                     "type": "string",
                     "enum": [
-                      "landing",
                       "corporate",
-                      "portfolio",
-                      "documentation",
                       "blog",
+                      "portfolio",
                       "app_showcase"
                     ]
                   },

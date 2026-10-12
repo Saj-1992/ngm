@@ -295,11 +295,11 @@ describe("domains and websites (phase 5)", () => {
     expect(screen.getByText("Not configured")).toBeInTheDocument();
   });
   it("websites list and the website destination in the route builder", async () => {
-    const W = { id: "W1", name: "Shop", kind: "template", template: "landing", default_locale: "fa", locales: ["fa", "en"], active_version_id: "V1", draft_revision: 1, revision: 1, created_at: "x", updated_at: "x", has_upload: false };
-    mockFetch({ ...sess(["websites.read", "websites.write"]), "/api/v1/websites": { status: 200, body: { items: [W] } }, "/api/v1/websites/templates": { status: 200, body: { templates: ["landing"], locales: { fa: "rtl", en: "ltr" } } } });
+    const W = { id: "W1", name: "Shop", kind: "template", template: "corporate", default_locale: "fa", locales: ["fa", "en"], active_version_id: "V1", draft_revision: 1, revision: 1, created_at: "x", updated_at: "x", has_upload: false };
+    mockFetch({ ...sess(["websites.read", "websites.write"]), "/api/v1/websites": { status: 200, body: { items: [W] } }, "/api/v1/websites/templates": { status: 200, body: { templates: ["corporate"], locales: { fa: "rtl", en: "ltr" } } } });
     renderAt("/web/websites");
     expect(await screen.findByText("Shop")).toBeInTheDocument();
-    expect(screen.getByText("Landing page")).toBeInTheDocument();
+    expect(screen.getByText("Corporate")).toBeInTheDocument();
     expect(screen.getByText("Published")).toBeInTheDocument();
   });
   it("SSL page offers Let's Encrypt and shows ACME state", async () => {

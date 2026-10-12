@@ -15,7 +15,7 @@ import (
 )
 
 // Templates are the supported structured templates.
-var Templates = []string{"landing", "corporate", "portfolio", "documentation", "blog", "app_showcase"}
+var Templates = []string{"corporate", "blog", "portfolio", "app_showcase"}
 
 // Locales supported for path-based localisation, with their direction.
 var Locales = map[string]string{"en": "ltr", "fa": "rtl", "ar": "rtl", "de": "ltr", "fr": "ltr", "es": "ltr", "tr": "ltr"}
@@ -46,7 +46,7 @@ type Site struct {
 	Accent  string `json:"accent,omitempty"`   // #RRGGBB
 }
 
-// Page is one page (or blog post / documentation page).
+// Page is one page (or blog post).
 type Page struct {
 	Slug        string  `json:"slug"`           // "" = home
 	Kind        string  `json:"kind,omitempty"` // page | post | doc
@@ -201,9 +201,9 @@ func Validate(c *Content, template string, locales []string, def string, media m
 		}
 		seen[p.Slug] = true
 		switch p.Kind {
-		case "", "page", "post", "doc":
+		case "", "page", "post":
 		default:
-			add("%s: kind must be page, post or doc", w)
+			add("%s: kind must be page or post", w)
 		}
 		if p.Date != "" && !dateRe.MatchString(p.Date) {
 			add("%s: date must be YYYY-MM-DD", w)

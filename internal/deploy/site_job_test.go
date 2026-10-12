@@ -14,7 +14,7 @@ func siteEnv(t *testing.T) (*env, *websites.Service, string) {
 	e := newEnv(t)
 	e.c.WebsitesRoot = t.TempDir()
 	svc := e.c.siteSvc()
-	w, err := svc.Create(context.Background(), nil, "Shop", "template", "landing", "fa", []string{"fa", "en"})
+	w, err := svc.Create(context.Background(), nil, "Shop", "template", "corporate", "fa", []string{"fa", "en"})
 	if err != nil {
 		t.Fatal(err)
 	}

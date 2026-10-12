@@ -45,7 +45,7 @@ Partially closed (alert headlines and job kinds translated; health details, job 
 | NGM-CERT-002 | P0 | Private key protection & Nginx-readable deployment | §6.2 | 5 | T-HELPER-NGINX, T-UNIT-GWSTORE | Verified — vault + 0600 deployed keys; ACME production cert live for the published panel |
 | NGM-CERT-003 | P0 | Validate SAN/key/chain/expiry before activation; keep known-good | §6.2 | 5 | T-UNIT-GWSTORE, T-UNIT-COMPILER | Verified — validation unit tests + ACME staging and production live |
 | NGM-WEB-001 | P0 | ZIP upload hardening (ratio/traversal/symlink/device/MIME) | §6.3 | 5 | T-SEC-ZIP | Verified — ZIP hardening unit tests + websites E2E |
-| NGM-WEB-002 | P1 | Six structured templates | §6.3 | 5 | T-WEB-TPL | Verified — live E2E (TEST_REPORT Phase 5) + CI matrix 50dfb01; four templates are now full branded sites (ADR-041; live check 2026-10-12, TEST_REPORT "Post-RC run 4") |
+| NGM-WEB-002 | P1 | Four structured templates (was six; ADR-042) | §6.3 | 5 | T-WEB-TPL | Verified — live E2E (TEST_REPORT Phase 5) + CI matrix 50dfb01; four templates are now full branded sites (ADR-041; live check 2026-10-12, TEST_REPORT "Post-RC run 4") |
 | NGM-WEB-003 | P1 | Block editor, media, SEO, drafts | §6.3 | 5 | T-WEB-EDIT | Verified — live E2E (TEST_REPORT Phase 5) + CI matrix 50dfb01 |
 | NGM-WEB-004 | P0 | Preview on isolated origin | §6.3 | 5 | T-SEC-PREVIEW | Verified — live E2E (TEST_REPORT Phase 5) + CI matrix 50dfb01 |
 | NGM-WEB-005 | P1 | Path locales, hreflang, canonical, sitemap, RTL/LTR | §6.3 | 5 | T-WEB-I18N | Verified — live E2E (TEST_REPORT Phase 5) + CI matrix 50dfb01 |

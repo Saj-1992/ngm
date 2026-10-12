@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 (development channel — final build of this release line)
+### Removed
+- The Landing and Documentation website templates (ADR-042). Four complete branded templates remain: corporate, blog, portfolio, app showcase.
+### Added
+- `scripts/ops/cleanup_vm.cjs`: dry-run-first removal of test leftovers (keeps the published panel, the four sites, owner accounts and the newest five backups).
+
 ## 0.8.1-rc.9 (development channel)
 ### Added
 - Four complete, branded, bilingual (fa/en) starter websites — corporate (villa advisory), blog (magazine), portfolio (design studio) and app showcase (trip-planner app) — each with 6–11 pages, generated artwork (deterministic PNGs in the site's brand colours), a favicon, social meta tags, a skip link, footer navigation, Solar Hijri dates for Persian readers, and a privacy page (ADR-041). Landing and documentation keep their compact starters.

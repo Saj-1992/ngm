@@ -64,7 +64,7 @@ H.start(async () => {
   // ---- 3. Complete template websites + custom 404 ---------------------------
   const raw = (method, path, buf, ct, extra = {}) => api(method, path, undefined, { "Content-Type": ct, ...extra }, false, buf);
   const sites = {};
-  for (const tpl of ["corporate", "portfolio", "documentation", "blog", "landing", "app_showcase"]) {
+  for (const tpl of ["corporate", "portfolio", "blog", "app_showcase"]) {
     const name = "e2e-tpl-" + tpl.replace("_", "-");
     let s = (await api("GET", "/api/v1/websites")).body.items.find((w) => w.name === name);
     if (!s) s = (await api("POST", "/api/v1/websites", { name, kind: "template", template: tpl, default_locale: "en", locales: ["en", "fa"] })).body;

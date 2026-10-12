@@ -72,15 +72,15 @@ func TestLocalisationSEO(t *testing.T) {
 }
 
 func TestEscapingAndUnsafeLinks(t *testing.T) {
-	c := Starter("landing")
+	c := Starter("corporate")
 	c.Pages[0].Blocks = []Block{{Type: "text", Heading: L{"fa": `<img src=x onerror=alert(1)>`},
 		Text: L{"fa": "**bold** <script>alert(1)</script> [ok](https://example.com) [x](javascript:alert(1))"}}}
-	_, err := Build(Input{Content: c, Template: "landing", Locales: []string{"fa"}, Default: "fa"})
+	_, err := Build(Input{Content: c, Template: "corporate", Locales: []string{"fa"}, Default: "fa"})
 	if err == nil || !strings.Contains(err.Error(), "unsafe link") {
 		t.Fatalf("javascript: link must be rejected: %v", err)
 	}
 	c.Pages[0].Blocks[0].Text = L{"fa": `**bold** <script>alert(1)</script> [ok](https://example.com) "quotes"`}
-	out := build(t, c, "landing", nil)
+	out := build(t, c, "corporate", nil)
 	h := string(out.Files["fa/index.html"])
 	if strings.Contains(h, "<script>") || strings.Contains(h, "<img src=x") || !strings.Contains(h, "&lt;script&gt;") || !strings.Contains(h, "<strong>bold</strong>") ||
 		!strings.Contains(h, `<a href="https://example.com" rel="noopener noreferrer">ok</a>`) {
@@ -92,7 +92,7 @@ func TestEscapingAndUnsafeLinks(t *testing.T) {
 		}
 	}
 	c.Pages[0].Blocks = []Block{{Type: "cta", Label: L{"fa": "x"}, Href: "javascript:alert(1)"}}
-	if _, err := Build(Input{Content: c, Template: "landing", Locales: []string{"fa"}, Default: "fa"}); err == nil {
+	if _, err := Build(Input{Content: c, Template: "corporate", Locales: []string{"fa"}, Default: "fa"}); err == nil {
 		t.Fatal("unsafe href accepted")
 	}
 }
@@ -121,22 +121,18 @@ func TestValidation(t *testing.T) {
 			t.Fatalf("missing error %q in:\n%s", want, joined)
 		}
 	}
-	if errs, _ := Validate(Starter("landing"), "nope", []string{"xx"}, "en", nil); len(errs) < 2 {
+	if errs, _ := Validate(Starter("corporate"), "nope", []string{"xx"}, "en", nil); len(errs) < 2 {
 		t.Fatal("template/locale validation")
 	}
 }
 
-func TestBlogOrderingAndDocsSidebar(t *testing.T) {
+func TestBlogOrdering(t *testing.T) {
 	c := Starter("blog")
 	c.Pages = append(c.Pages, Page{Slug: "newer", Kind: "post", Date: "2026-10-30", Title: L{"fa": "تازه", "en": "Newer"}})
 	out := build(t, c, "blog", nil)
 	h := string(out.Files["en/index.html"])
 	if strings.Index(h, "Newer") > strings.Index(h, "Why courtyard houses keep coming back") || strings.Index(h, "Newer") < 0 {
 		t.Fatal("posts must be newest first")
-	}
-	d := build(t, Starter("documentation"), "documentation", nil)
-	if !strings.Contains(string(d.Files["en/install/index.html"]), `<aside><nav>`) {
-		t.Fatal("docs sidebar")
 	}
 }
 
@@ -264,7 +260,7 @@ func TestStarterMediaIsDeterministicPNG(t *testing.T) {
 			t.Fatalf("invalid media name %s", n)
 		}
 	}
-	if StarterMedia("landing") != nil {
+	if StarterMedia("nope") != nil {
 		t.Fatal("templates without artwork must return none")
 	}
 }
