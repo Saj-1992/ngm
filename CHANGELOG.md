@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1-rc.9 (development channel)
+### Added
+- Four complete, branded, bilingual (fa/en) starter websites — corporate (villa advisory), blog (magazine), portfolio (design studio) and app showcase (trip-planner app) — each with 6–11 pages, generated artwork (deterministic PNGs in the site's brand colours), a favicon, social meta tags, a skip link, footer navigation, Solar Hijri dates for Persian readers, and a privacy page (ADR-041). Landing and documentation keep their compact starters.
+- New content blocks: stats, steps, team, pricing, timeline, contact; per-page cover image; internal links written as `page:<slug>` resolve per locale and work under any base path.
+- Cloudflare zones page: zone discovery and search, subdomain creation (automatic or manual label, A/AAAA/CNAME, TTL, proxy flag default off), collision checks, DNS plan updates when only the proxy flag differs (never overwrites records NGM does not manage).
+- `scripts/ops/seed_sites.cjs` creates, builds and publishes the four sites (`--refresh` replaces content with the current starter).
+### Fixed
+- Pages were ordered with a non-transitive comparator once posts and pages were mixed, so newly added posts could appear in the wrong place.
+- Page cover images were left out of the built site.
+
 ## 0.8.1-rc.6 (development channel)
 ### Added
 - Control Center published on a configurable secret port and path (default 9443); the apex domain serves the fallback website on every port (ADR-036/037).

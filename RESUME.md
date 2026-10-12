@@ -16,6 +16,12 @@ the next session continues from **Next steps**, the first unchecked item. Do not
   - Make every unknown or probing visitor see a real-looking website (no routing fingerprint), to avoid abuse flags from crawlers and scanners (Cloudflare, Hetzner, firewalls).
 
 ## Next steps
+### 2026-10-12 state
+- [x] Four branded starter sites (ADR-041), seeded + published on the VM (villa-advisory = fallback; sarv-journal, atelier-dena, hamrah-app). Verified live over HTTPS (pages, media, 404, sitemap, robots).
+- [x] Cloudflare zones/subdomain UI + backend committed; migration 0007 applied on the VM (rc.7+).
+- [ ] Ship rc.9 (faq page in corporate starter) → rerun p5_site, p9_decoy, p10_features (p7 skipped by owner), update PROGRESS/TEST_REPORT, push, tag release.
+- Note: the full run on rc.6 stopped after p4 (SSH handshake timeout from the dev host); the server was healthy.
+
 ### Master-prompt work 2026-10-11 (state)
 - [x] Panel on secret port/path :9443, apex = decoy everywhere (ADR-037); live + browser verified.
 - [x] Rich bilingual starter content for 6 templates + custom 404; live 17/17 (scripts/e2e/e2e_p10_features.cjs).

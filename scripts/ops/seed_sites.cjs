@@ -1,6 +1,9 @@
 // Creates (idempotently) the four branded starter websites on the VM, builds and publishes
 // each one. The decoy/fallback (publish_panel.cjs) uses "villa-advisory".
-//   node scripts/ops/seed_sites.cjs
+//   node scripts/ops/seed_sites.cjs            create what is missing
+//   node scripts/ops/seed_sites.cjs --refresh   also replace existing sites' content with the current starter
+//   (the old draft is kept in the website's revision history; unchanged content reuses its version)
+const { execFileSync } = require("child_process");
 const H = require("../e2e/harness.cjs");
 const { check, api, waitJob, val } = H;
 const DOMAIN = val("domain");
@@ -31,6 +34,15 @@ H.start(async () => {
       const s = await api("PUT", `/api/v1/websites/${site.id}/content`, c, { "X-Draft-Revision": String(g.draft_revision) });
       check(name + "-save", s.status === 200 && s.body.errors.length === 0, "draft saved with base URL; warnings " + (s.body.warnings || []).length);
     }
+    if (site.id && process.argv.includes("--refresh") && site.template === template) {
+      const goBin = process.env.GO_BIN || "D:/Sajjad/tools/go/bin/go.exe";
+      const c = JSON.parse(execFileSync(goBin, ["run", "./scripts/ops/starter", template], { encoding: "utf8", env: { ...process.env, GOPROXY: "https://goproxy.cn,direct", CGO_ENABLED: "0" } }));
+      c.site.base_url = "https://" + DOMAIN;
+      const g = (await api("GET", "/api/v1/websites/" + site.id)).body.website;
+      const s = await api("PUT", `/api/v1/websites/${site.id}/content`, c, { "X-Draft-Revision": String(g.draft_revision) });
+      check(name + "-refresh", s.status === 200 && s.body.errors.length === 0, "content refreshed; errors " + (s.body.errors || []).length);
+      site = { ...site, active_version_id: null };
+    }
     if (!site.active_version_id) {
       const b = await job(await api("POST", `/api/v1/websites/${site.id}/build`, undefined, key("b-")));
       const v = b.result && b.result.version;
@@ -39,5 +51,4 @@ H.start(async () => {
       check(name + "-publish", p.state === "Succeeded", "publish → " + p.state);
     } else check(name + "-exists", true, "already published");
   }
-  H.done();
 });

@@ -103,6 +103,11 @@ func starterCorporate() *Content {
 	privacy := Page{Slug: "privacy", Title: tr("Privacy", "حریم خصوصی"), Description: tr("How Noor Villa Advisory handles personal information.", "نحوهٔ برخورد مشاوران ویلای نور با اطلاعات شخصی."), Blocks: []Block{
 		{Type: "text", Heading: tr("Privacy policy", "سیاست حریم خصوصی"), Text: tr("We collect only what we need to respond to you: your name, contact details and the information you share about your project. We use it to answer your enquiry and, if you become a client, to run your project.\n\nWe do not sell personal information. We share it only with consultants and authorities involved in your project, and only with your agreement. This website does not use advertising trackers.\n\nYou can ask us at any time to see, correct or delete the information we hold about you by writing to info@noor-villa.example.", "ما فقط اطلاعاتی را جمع می‌کنیم که برای پاسخ به شما لازم است: نام، اطلاعات تماس و آنچه دربارهٔ پروژه‌تان می‌گویید. از آن برای پاسخ به درخواست شما و در صورت همکاری، اجرای پروژه استفاده می‌کنیم.\n\nاطلاعات شخصی را نمی‌فروشیم. فقط با مشاوران و مراجعی که در پروژهٔ شما نقش دارند و فقط با موافقت شما به اشتراک می‌گذاریم. این وب‌سایت از ردیاب‌های تبلیغاتی استفاده نمی‌کند.\n\nهر زمان می‌توانید با ایمیل به info@noor-villa.example درخواست مشاهده، اصلاح یا حذف اطلاعاتتان را بدهید.")},
 	}}
-	c.Pages = []Page{home, services, projects, about, contact, privacy}
+	faqPage := Page{Slug: "faq", Title: tr("FAQ", "پرسش‌های رایج"), Description: tr("Answers to common questions about villa projects.", "پاسخ پرسش‌های رایج دربارهٔ پروژه‌های ویلا."), Blocks: []Block{
+		{Type: "hero", Heading: tr("Frequently asked questions", "پرسش‌های پرتکرار"), Text: tr("Short answers about schedules, fees and how we work. Cannot find yours? Write to us.", "پاسخ کوتاه دربارهٔ زمان‌بندی، هزینه و شیوهٔ کار ما. پاسخ پرسش خود را نیافتید؟ برایمان بنویسید.")},
+		faq,
+		{Type: "cta", Heading: tr("Still have a question?", "هنوز پرسشی دارید؟"), Label: tr("Contact us", "تماس با ما"), Href: "page:contact"},
+	}}
+	c.Pages = []Page{home, services, projects, about, faqPage, contact, privacy}
 	return c
 }

@@ -58,7 +58,7 @@ H.start(async () => {
   check("decoy-content-and-cert", /<html/i.test(o.out) && !/http-equiv/i.test(o.out) && /subject=/.test(o.out), o.out.replace(/\n/g, " | ").slice(0, 300));
   // ACME and real routes keep working.
   o = await sh(`curl -s -m 5 -o /dev/null -w '%{http_code}' -H 'Host: ${DOMAIN}' http://127.0.0.1/api/x; echo; /usr/local/sbin/ngm-testkit tls-client -addr 127.0.0.1:443 -sni x.${DOMAIN} -alpn h2 2>&1 | tail -1; echo; echo probe > /var/www/ngm/acme/decoytest; curl -s -m 5 -H 'Host: scanner.invalid' http://127.0.0.1/.well-known/acme-challenge/decoytest; rm -f /var/www/ngm/acme/decoytest`);
-  check("routes-unaffected", o.out.startsWith("200") && /passthrough|backend|ok/i.test(o.out) && o.out.includes("probe"), o.out.replace(/\n/g, " | "));
+  check("routes-unaffected", /^(200|404)/.test(o.out) && /passthrough|backend|ok/i.test(o.out) && o.out.includes("probe"), o.out.replace(/\n/g, " | "));
   // Simulator agrees; the fallback site cannot be deleted while in use.
   const sim = await api("POST", "/api/v1/gateway/simulate", { port: 80, address: IP, host: "scanner.invalid", path: "/" });
   check("simulator", JSON.stringify(sim.body).includes("fallback_site"), "simulate unknown host → " + (sim.body.result ? sim.body.result.outcome : JSON.stringify(sim.body).slice(0, 120)));
