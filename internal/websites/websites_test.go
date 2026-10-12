@@ -138,3 +138,25 @@ func TestStaticZipSite(t *testing.T) {
 		t.Fatal("static sites have no media library")
 	}
 }
+
+// The four branded starters ship their own artwork and must build as created
+// (page cover images included in the build's media).
+func TestBrandedStarterSitesBuildWithTheirArtwork(t *testing.T) {
+	ctx := context.Background()
+	s := svc(t)
+	for _, tpl := range []string{"corporate", "blog", "portfolio", "app_showcase"} {
+		w, err := s.Create(ctx, nil, "site-"+tpl, "template", tpl, "fa", []string{"fa", "en"})
+		if err != nil {
+			t.Fatalf("%s: %v", tpl, err)
+		}
+		b, err := s.Build(ctx, w.ID, "U1", "J-"+tpl)
+		if err != nil {
+			t.Fatalf("%s build: %v", tpl, err)
+		}
+		for name := range usedMedia(w.Content) {
+			if _, err := os.Stat(filepath.Join(s.BuildDir(w.ID, b.Version.ID), "media", name)); err != nil {
+				t.Fatalf("%s: %s missing from the build", tpl, name)
+			}
+		}
+	}
+}

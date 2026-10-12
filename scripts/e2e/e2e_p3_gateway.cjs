@@ -132,7 +132,7 @@ function httpsGet(host, path, servername, extra = {}) {
     await api("PUT", "/api/v1/gateway/fallback", { website_id: "", certificate_id: "" });
     // Clean state from earlier runs (desired model only; Nginx untouched until deploy).
     // The published Control Center (scripts/ops/publish_panel.cjs) and its listener stay.
-    const PROTECTED = new Set(["ngm-panel-public", "ngm-panel", "panel-prod", "panel443", "main-site", "front443", "web"]);
+    const PROTECTED = new Set(["ngm-panel-public", "ngm-panel", "panel-prod", "panel443", "main-site", "villa-advisory", "sarv-journal", "atelier-dena", "hamrah-app", "front443", "web"]);
     const wipe = async (path) => {
       const l = await api("GET", path);
       for (const it of (l.body.items || []).filter((x) => !PROTECTED.has(x.name))) await api("DELETE", path + "/" + it.id, undefined, { "If-Match": `"r${it.revision}"` });

@@ -779,6 +779,9 @@ func usedMedia(c *sitebuild.Content) map[string]bool {
 		return out
 	}
 	for _, p := range c.Pages {
+		if p.Image != "" {
+			out[p.Image] = true
+		}
 		for _, b := range p.Blocks {
 			if b.Image != "" {
 				out[b.Image] = true

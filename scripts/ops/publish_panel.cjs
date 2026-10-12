@@ -48,14 +48,16 @@ H.start(async () => {
   check("certificate-trusted", cert && !/STAGING|Fake/i.test(cert.issuer), "issuer: " + (cert && cert.issuer));
 
   // 3. Decoy website (published) and the global fallback (unknown host/SNI/IP on any port).
-  let site = (await api("GET", "/api/v1/websites")).body.items.find((w) => w.name === "main-site");
-  if (!site) site = (await api("POST", "/api/v1/websites", { name: "main-site", kind: "template", template: "corporate", default_locale: "fa", locales: ["fa", "en"] })).body;
+  const sites = (await api("GET", "/api/v1/websites")).body.items;
+  // The decoy is the owner's chosen branded site (see scripts/ops/seed_sites.cjs); main-site is the older default.
+  let site = sites.find((w) => w.name === "villa-advisory") || sites.find((w) => w.name === "main-site");
+  if (!site) site = (await api("POST", "/api/v1/websites", { name: "villa-advisory", kind: "template", template: "corporate", default_locale: "fa", locales: ["fa", "en"] })).body;
   if (!site.active_version_id) {
     const b = await job(await api("POST", `/api/v1/websites/${site.id}/build`, undefined, key("b-")));
     await job(await api("POST", `/api/v1/websites/${site.id}/publish`, { version_id: b.result.version.id }, key("p-")));
   }
   let r = await api("PUT", "/api/v1/gateway/fallback", { website_id: site.id, certificate_id: cert.id });
-  check("fallback", r.status === 200 && r.body.enabled, "global fallback = main-site + production cert");
+  check("fallback", r.status === 200 && r.body.enabled, "global fallback = "+site.name+" + production cert");
 
   // 4. Listeners: keep :80 (ACME + fallback), :443 (fallback/passthrough), add :9443 (panel).
   const listeners = (await api("GET", "/api/v1/listeners")).body.items;
