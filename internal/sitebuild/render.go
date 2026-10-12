@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -175,15 +176,24 @@ func HashFiles(files map[string][]byte) (string, int64) {
 // orderedPages: home first, then pages; blog posts newest first; docs keep order.
 func orderedPages(ps []Page, template string) []Page {
 	out := append([]Page(nil), ps...)
+	// Strict weak order: home first, other pages in authoring order, posts
+	// last and newest first. (A comparator that only orders posts against posts
+	// is not transitive once pages and posts are mixed.)
+	rank := func(p Page) int {
+		switch {
+		case p.Slug == "":
+			return 0
+		case p.Kind == "post":
+			return 2
+		}
+		return 1
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		if (a.Slug == "") != (b.Slug == "") {
-			return a.Slug == ""
+		if ra, rb := rank(a), rank(b); ra != rb {
+			return ra < rb
 		}
-		if a.Kind == "post" && b.Kind == "post" {
-			return a.Date > b.Date
-		}
-		return false
+		return rank(a) == 2 && a.Date > b.Date
 	})
 	return out
 }
@@ -247,8 +257,21 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 		fmt.Fprintf(b, "<link rel=\"alternate\" hreflang=\"%s\" href=\"%s%s\">\n", alt, esc(base), pagePath(alt, pg.Slug))
 	}
 	fmt.Fprintf(b, "<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s%s\">\n", esc(base), pagePath(in.Default, pg.Slug))
+	accent := c.Site.Accent
+	if accent == "" {
+		accent = "#2563eb"
+	}
+	mark := firstRune(siteTitle)
+	fmt.Fprintf(b, "<meta name=\"theme-color\" content=\"%s\">\n<meta property=\"og:site_name\" content=\"%s\">\n<meta property=\"og:type\" content=\"%s\">\n<meta property=\"og:locale\" content=\"%s\">\n<meta name=\"twitter:card\" content=\"summary_large_image\">\n", esc(accent), esc(siteTitle), ogType(pg), loc)
+	if desc != "" {
+		fmt.Fprintf(b, "<meta property=\"og:description\" content=\"%s\">\n", esc(desc))
+	}
+	if pg.Image != "" && base != "" {
+		fmt.Fprintf(b, "<meta property=\"og:image\" content=\"%s/media/%s\">\n", esc(base), esc(pg.Image))
+	}
+	fmt.Fprintf(b, "<link rel=\"icon\" href=\"%s\">\n", faviconURI(mark, accent))
 	fmt.Fprintf(b, "<link rel=\"stylesheet\" href=\"%sassets/site.css\">\n</head>\n", p.up)
-	fmt.Fprintf(b, "<body class=\"t-%s\">\n<header class=\"top\"><div class=\"wrap bar\"><a class=\"brand\" href=\"%s\">%s</a>", in.Template, p.href(pagePath(loc, "")), esc(siteTitle))
+	fmt.Fprintf(b, "<body class=\"t-%s\">\n<a class=\"skip\" href=\"#main\">%s</a>\n<header class=\"top\"><div class=\"wrap bar\"><a class=\"brand\" href=\"%s\"><span class=\"mark\" aria-hidden=\"true\">%s</span>%s</a>", in.Template, esc(skipText(loc)), p.href(pagePath(loc, "")), esc(mark), esc(siteTitle))
 	// Navigation (not for single-page landing sites).
 	if in.Template != "landing" && in.Template != "documentation" {
 		b.WriteString("<nav>")
@@ -287,14 +310,17 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 			}
 			fmt.Fprintf(b, "<a href=\"%s\"%s>%s</a>", p.href(pagePath(loc, np.Slug)), cur, esc(p.t(np.Title)))
 		}
-		b.WriteString("</nav></aside><main>\n")
+		b.WriteString("</nav></aside><main id=\"main\">\n")
 	} else {
-		b.WriteString("<main class=\"wrap\">\n")
+		b.WriteString("<main class=\"wrap\" id=\"main\">\n")
 	}
 	if pg.Slug != "" || len(pg.Blocks) == 0 || pg.Blocks[0].Type != "hero" {
 		fmt.Fprintf(b, "<h1>%s</h1>\n", esc(title))
 		if pg.Kind == "post" && pg.Date != "" {
-			fmt.Fprintf(b, "<p class=\"date\"><time datetime=\"%s\">%s</time></p>\n", pg.Date, pg.Date)
+			fmt.Fprintf(b, "<p class=\"date\"><time datetime=\"%s\">%s</time></p>\n", pg.Date, esc(formatDate(loc, pg.Date)))
+		}
+		if pg.Image != "" {
+			b.WriteString("<p class=\"cover\">" + p.img(pg.Image, title) + "</p>\n")
 		}
 	}
 	for _, bl := range pg.Blocks {
@@ -304,9 +330,20 @@ func renderPageUp(c *Content, in Input, pages []Page, pg Page, loc, base, up str
 	if in.Template == "documentation" {
 		b.WriteString("</div>\n")
 	}
-	if f := p.t(c.Site.Footer); f != "" {
-		fmt.Fprintf(b, "<footer class=\"wrap foot\">%s</footer>\n", paragraphs(f))
+	b.WriteString("<footer class=\"foot\"><div class=\"wrap footgrid\">")
+	fmt.Fprintf(b, "<div><strong class=\"fbrand\">%s</strong>%s</div>", esc(siteTitle), paragraphs(p.t(c.Site.Tagline)))
+	b.WriteString("<nav aria-label=\"footer\">")
+	for _, np := range pages {
+		if np.Hidden || np.Slug == "" || np.Kind == "post" || np.Kind == "doc" {
+			continue
+		}
+		fmt.Fprintf(b, "<a href=\"%s\">%s</a>", p.href(pagePath(loc, np.Slug)), esc(p.t(np.Title)))
 	}
+	b.WriteString("</nav></div>")
+	if f := p.t(c.Site.Footer); f != "" {
+		fmt.Fprintf(b, "<div class=\"wrap fsmall\">%s</div>", paragraphs(f))
+	}
+	b.WriteString("</footer>\n")
 	b.WriteString("</body>\n</html>\n")
 	return b.String()
 }
@@ -331,12 +368,17 @@ func renderBlock(p *page, bl Block, pages []Page, loc string) {
 	h, txt, label := p.t(bl.Heading), p.t(bl.Text), p.t(bl.Label)
 	switch bl.Type {
 	case "hero":
-		b.WriteString("<section class=\"hero\">")
+		cls := "hero"
+		if bl.Image != "" {
+			cls += " has-img"
+		}
+		fmt.Fprintf(b, "<section class=\"%s\"><div class=\"hero-copy\">", cls)
 		if h != "" {
 			fmt.Fprintf(b, "<h1>%s</h1>", esc(h))
 		}
 		b.WriteString(paragraphs(txt))
-		b.WriteString(link(bl.Href, label, "button"))
+		b.WriteString(p.link(bl.Href, label, "button"))
+		b.WriteString("</div>")
 		b.WriteString(p.img(bl.Image, h))
 		b.WriteString("</section>\n")
 	case "text":
@@ -375,7 +417,7 @@ func renderBlock(p *page, bl Block, pages []Page, loc string) {
 			fmt.Fprintf(b, "<h2>%s</h2>", esc(h))
 		}
 		b.WriteString(paragraphs(txt))
-		b.WriteString(link(bl.Href, label, "button"))
+		b.WriteString(p.link(bl.Href, label, "button"))
 		b.WriteString("</section>\n")
 	case "faq":
 		b.WriteString("<section class=\"faq\">")
@@ -392,6 +434,49 @@ func renderBlock(p *page, bl Block, pages []Page, loc string) {
 			fmt.Fprintf(b, "<figcaption>%s</figcaption>", esc(h))
 		}
 		b.WriteString("</figure>\n")
+	case "stats", "steps", "team", "pricing", "timeline":
+		fmt.Fprintf(b, "<section class=\"%s\">", bl.Type)
+		if h != "" {
+			fmt.Fprintf(b, "<h2>%s</h2>", esc(h))
+		}
+		b.WriteString(paragraphs(txt))
+		tag := "ul"
+		if bl.Type == "steps" || bl.Type == "timeline" {
+			tag = "ol"
+		}
+		fmt.Fprintf(b, "<%s class=\"grid\">", tag)
+		for _, it := range bl.Items {
+			t := p.t(it.Title)
+			b.WriteString("<li>")
+			b.WriteString(p.img(it.Image, t))
+			switch bl.Type {
+			case "stats":
+				fmt.Fprintf(b, "<span class=\"num\">%s</span>", esc(t))
+			case "team":
+				fmt.Fprintf(b, "<span class=\"avatar\" aria-hidden=\"true\">%s</span><h3>%s</h3>", esc(firstRune(t)), esc(t))
+			default:
+				if t != "" {
+					fmt.Fprintf(b, "<h3>%s</h3>", esc(t))
+				}
+			}
+			b.WriteString(paragraphs(p.t(it.Text)))
+			if bl.Type == "pricing" {
+				b.WriteString(p.link(it.Href, label, "button"))
+			}
+			b.WriteString("</li>")
+		}
+		fmt.Fprintf(b, "</%s></section>\n", tag)
+	case "contact":
+		b.WriteString("<section class=\"contact\">")
+		if h != "" {
+			fmt.Fprintf(b, "<h2>%s</h2>", esc(h))
+		}
+		b.WriteString(paragraphs(txt))
+		b.WriteString("<dl>")
+		for _, it := range bl.Items {
+			fmt.Fprintf(b, "<dt>%s</dt><dd>%s</dd>", esc(p.t(it.Title)), inline(p.t(it.Text)))
+		}
+		b.WriteString("</dl></section>\n")
 	case "posts":
 		b.WriteString("<section class=\"posts\">")
 		if h != "" {
@@ -402,9 +487,9 @@ func renderBlock(p *page, bl Block, pages []Page, loc string) {
 			if pp.Kind != "post" || pp.Hidden {
 				continue
 			}
-			fmt.Fprintf(b, "<li><a href=\"%s\">%s</a>", p.href(pagePath(loc, pp.Slug)), esc(p.t(pp.Title)))
+			fmt.Fprintf(b, "<li>%s<a href=\"%s\">%s</a>", p.img(pp.Image, p.t(pp.Title)), p.href(pagePath(loc, pp.Slug)), esc(p.t(pp.Title)))
 			if pp.Date != "" {
-				fmt.Fprintf(b, " <time datetime=\"%s\">%s</time>", pp.Date, pp.Date)
+				fmt.Fprintf(b, "<time datetime=\"%s\">%s</time>", pp.Date, esc(formatDate(loc, pp.Date)))
 			}
 			if d := p.t(pp.Description); d != "" {
 				fmt.Fprintf(b, "<p>%s</p>", esc(d))
@@ -438,6 +523,18 @@ section{margin-block:28px}.hero{padding-block:32px}.hero p{font-size:1.15rem;col
 .foot{border-top:1px solid var(--soft);padding-block:24px;color:var(--muted);font-size:.9rem}
 .docs{display:grid;grid-template-columns:220px 1fr;gap:32px}.docs aside nav{flex-direction:column;position:sticky;top:16px;padding-block:32px}
 @media (max-width:720px){.docs{grid-template-columns:1fr}.docs aside nav{position:static;padding-block:16px 0}}
+.skip{position:absolute;inset-inline-start:-999px;top:8px;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;z-index:9}.skip:focus{inset-inline-start:8px}
+.mark{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;font-weight:700;margin-inline-end:10px;vertical-align:middle}
+.hero.has-img{display:grid;gap:28px;align-items:center;grid-template-columns:1.1fr 1fr}.hero.has-img img{width:100%}
+@media (max-width:760px){.hero.has-img{grid-template-columns:1fr}}
+.stats .grid{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));text-align:center}.num{display:block;font-size:2.2rem;font-weight:800;color:var(--accent);line-height:1.2}
+.steps .grid,.timeline .grid{counter-reset:s}.steps li,.timeline li{counter-increment:s;position:relative}.steps li::before{content:counter(s);display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;margin-bottom:8px}
+.team .avatar{display:inline-grid;place-items:center;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:1.4rem;font-weight:700;margin-bottom:8px}
+.pricing .grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}.pricing li{border:1px solid var(--soft);background:transparent;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.contact dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 20px}.contact dt{font-weight:600}.contact dd{margin:0}
+.cover img{width:100%;max-height:420px;object-fit:cover}.posts li img{width:100%;max-height:220px;object-fit:cover;margin-bottom:8px}
+.t-blog .posts ul{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.posts time{display:block;font-size:.9rem;margin-block:4px}.t-blog .posts li{border:1px solid var(--soft);border-radius:var(--radius);padding:14px}
+.footgrid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:24px}.foot nav{flex-direction:column}.fbrand{display:block;color:var(--fg)}.fsmall{margin-top:16px;font-size:.85rem}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 `
@@ -473,4 +570,85 @@ func notFoundPage(c *Content, in Input, accent string) string {
 	fmt.Fprintf(&b, "<div class=\"site\">%s</div>\n", esc(title))
 	b.WriteString("</main>\n</body>\n</html>\n")
 	return b.String()
+}
+
+func firstRune(s string) string {
+	for _, r := range strings.TrimSpace(s) {
+		return strings.ToUpper(string(r))
+	}
+	return "N"
+}
+
+func ogType(pg Page) string {
+	if pg.Kind == "post" {
+		return "article"
+	}
+	return "website"
+}
+
+func skipText(loc string) string {
+	v, _ := L{"en": "Skip to content", "fa": "پرش به محتوا"}.Get(loc, "en")
+	return v
+}
+
+// faviconURI is an inline SVG icon (the site's initial on its accent colour),
+// so every site has a favicon without an extra file or request.
+func faviconURI(mark, accent string) string {
+	svg := "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='" + accent + "'/><text x='32' y='44' font-size='34' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='#fff'>" + html.EscapeString(mark) + "</text></svg>"
+	return "data:image/svg+xml," + strings.ReplaceAll(url.QueryEscape(svg), "+", "%20")
+}
+
+// link renders an anchor; "page:<slug>" targets another page of this site in
+// the current locale (relative, so it works under any base path).
+func (p *page) link(href, label, class string) string {
+	if strings.HasPrefix(href, "page:") && label != "" {
+		slug := strings.TrimPrefix(href, "page:")
+		return fmt.Sprintf("<a class=\"%s\" href=\"%s\">%s</a>", class, esc(p.href(pagePath(p.loc, slug))), esc(label))
+	}
+	return link(href, label, class)
+}
+
+var (
+	enMonths = []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+	faMonths = []string{"فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"}
+)
+
+// formatDate renders YYYY-MM-DD for readers of loc: Persian readers get the
+// Solar Hijri calendar with Persian digits, everyone else an English date.
+func formatDate(loc, iso string) string {
+	var y, m, d int
+	if _, err := fmt.Sscanf(iso, "%d-%d-%d", &y, &m, &d); err != nil || m < 1 || m > 12 || d < 1 || d > 31 {
+		return iso
+	}
+	if loc != "fa" {
+		return fmt.Sprintf("%d %s %d", d, enMonths[m-1], y)
+	}
+	jy, jm, jd := toJalali(y, m, d)
+	return persianDigits(fmt.Sprint(jd)) + " " + faMonths[jm-1] + " " + persianDigits(fmt.Sprint(jy))
+}
+
+func persianDigits(s string) string {
+	return strings.NewReplacer("0", "۰", "1", "۱", "2", "۲", "3", "۳", "4", "۴", "5", "۵", "6", "۶", "7", "۷", "8", "۸", "9", "۹").Replace(s)
+}
+
+// toJalali converts a Gregorian date to the Solar Hijri calendar.
+func toJalali(gy, gm, gd int) (int, int, int) {
+	cum := [12]int{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
+	gy2 := gy
+	if gm > 2 {
+		gy2++
+	}
+	days := 355666 + 365*gy + (gy2+3)/4 - (gy2+99)/100 + (gy2+399)/400 + gd + cum[gm-1]
+	jy := -1595 + 33*(days/12053)
+	days %= 12053
+	jy += 4 * (days / 1461)
+	days %= 1461
+	if days > 365 {
+		jy += (days - 1) / 365
+		days = (days - 1) % 365
+	}
+	if days < 186 {
+		return jy, 1 + days/31, 1 + days%31
+	}
+	return jy, 7 + (days-186)/30, 1 + (days-186)%30
 }

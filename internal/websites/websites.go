@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -253,6 +254,20 @@ func (s *Service) Create(ctx context.Context, actor *auth.Principal, name, kind,
 	for _, d := range []string{"media", "uploads", versionDirsSubpath} {
 		if err := os.MkdirAll(s.dir(id, d), 0o770); err != nil {
 			return nil, err
+		}
+	}
+	if kind == KindTemplate {
+		// Branded starter sites ship with their own artwork in the media library.
+		art := sitebuild.StarterMedia(template)
+		names := make([]string, 0, len(art))
+		for n := range art {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			if _, err := s.AddMedia(ctx, actor, id, n, art[n]); err != nil {
+				return nil, fmt.Errorf("starter media %s: %w", n, err)
+			}
 		}
 	}
 	return s.Get(ctx, id)

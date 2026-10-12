@@ -55,6 +55,7 @@ type Page struct {
 	Date        string  `json:"date,omitempty"` // YYYY-MM-DD (posts)
 	Blocks      []Block `json:"blocks"`
 	Hidden      bool    `json:"hidden,omitempty"` // not in navigation
+	Image       string  `json:"image,omitempty"`  // cover image (media file name)
 }
 
 // Block is one content block.
@@ -84,7 +85,7 @@ var (
 	mediaRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}\.(png|jpg|jpeg|gif|webp|avif)$`)
 )
 
-var blockTypes = map[string]bool{"hero": true, "text": true, "features": true, "gallery": true, "cta": true, "faq": true, "quote": true, "links": true, "posts": true}
+var blockTypes = map[string]bool{"hero": true, "text": true, "features": true, "gallery": true, "cta": true, "faq": true, "quote": true, "links": true, "posts": true, "stats": true, "steps": true, "team": true, "pricing": true, "timeline": true, "contact": true}
 
 // Limits keep documents and builds bounded.
 const (
@@ -99,6 +100,9 @@ func SafeURL(s string) (string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", true
+	}
+	if strings.HasPrefix(s, "page:") && (s == "page:" || slugRe.MatchString(s[5:])) {
+		return s, true
 	}
 	if len(s) > 2000 || strings.ContainsAny(s, "\x00\r\n\t<>\"'` \\") {
 		return "", false
@@ -206,6 +210,9 @@ func Validate(c *Content, template string, locales []string, def string, media m
 		}
 		text(w+" title", p.Title, true)
 		text(w+" description", p.Description, false)
+		if p.Image != "" && (!mediaRe.MatchString(p.Image) || !media[p.Image]) {
+			add("%s: image %q is not in the media library", w, p.Image)
+		}
 		if len(p.Blocks) > MaxBlocks {
 			add("%s: too many blocks", w)
 		}

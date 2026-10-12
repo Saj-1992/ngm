@@ -7,6 +7,9 @@ import (
 
 func build(t *testing.T, c *Content, tpl string, media map[string][]byte) *Output {
 	t.Helper()
+	if media == nil {
+		media = StarterMedia(tpl)
+	}
 	out, err := Build(Input{Content: c, Template: tpl, Locales: []string{"fa", "en"}, Default: "fa", Media: media})
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +99,7 @@ func TestEscapingAndUnsafeLinks(t *testing.T) {
 
 func TestValidation(t *testing.T) {
 	c := Starter("blog")
-	errs, warns := Validate(c, "blog", []string{"fa", "en", "de"}, "fa", nil)
+	errs, warns := Validate(c, "blog", []string{"fa", "en", "de"}, "fa", mediaNames(StarterMedia("blog")))
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
@@ -125,10 +128,10 @@ func TestValidation(t *testing.T) {
 
 func TestBlogOrderingAndDocsSidebar(t *testing.T) {
 	c := Starter("blog")
-	c.Pages = append(c.Pages, Page{Slug: "newer", Kind: "post", Date: "2026-06-01", Title: L{"fa": "تازه", "en": "Newer"}})
+	c.Pages = append(c.Pages, Page{Slug: "newer", Kind: "post", Date: "2026-10-30", Title: L{"fa": "تازه", "en": "Newer"}})
 	out := build(t, c, "blog", nil)
 	h := string(out.Files["en/index.html"])
-	if strings.Index(h, "Newer") > strings.Index(h, "Reading the logs") || strings.Index(h, "Newer") < 0 {
+	if strings.Index(h, "Newer") > strings.Index(h, "Why courtyard houses keep coming back") || strings.Index(h, "Newer") < 0 {
 		t.Fatal("posts must be newest first")
 	}
 	d := build(t, Starter("documentation"), "documentation", nil)
@@ -141,7 +144,9 @@ func TestMediaIncluded(t *testing.T) {
 	c := Starter("portfolio")
 	c.Pages[0].Blocks[1].Items[0].Image = "shot.png"
 	png := []byte("\x89PNG\r\n\x1a\nfake")
-	out := build(t, c, "portfolio", map[string][]byte{"shot.png": png})
+	m := StarterMedia("portfolio")
+	m["shot.png"] = png
+	out := build(t, c, "portfolio", m)
 	if string(out.Files["media/shot.png"]) != string(png) || !strings.Contains(string(out.Files["en/index.html"]), `<img src="../media/shot.png"`) {
 		t.Fatal("media")
 	}
@@ -160,5 +165,119 @@ func TestRelativeLinksForSubpathMounts(t *testing.T) {
 	}
 	if strings.Contains(about, `href="/`) || strings.Contains(about, `src="/`) {
 		t.Fatal("site-absolute paths would break sub-path mounts")
+	}
+}
+
+func mediaNames(m map[string][]byte) map[string]bool {
+	out := map[string]bool{}
+	for n := range m {
+		out[n] = true
+	}
+	return out
+}
+
+// The four branded starter sites must be complete: several pages, both
+// languages everywhere, every image present, every internal link resolving.
+func TestBrandedStartersAreComplete(t *testing.T) {
+	for _, tpl := range []string{"corporate", "blog", "portfolio", "app_showcase"} {
+		c := Starter(tpl)
+		media := StarterMedia(tpl)
+		if len(media) < 4 {
+			t.Fatalf("%s: expected generated artwork, got %d files", tpl, len(media))
+		}
+		errs, warns := Validate(c, tpl, []string{"fa", "en"}, "fa", mediaNames(media))
+		if len(errs) != 0 || len(warns) != 1 { // the only warning: no base URL
+			t.Fatalf("%s: errs=%v warns=%v", tpl, errs, warns)
+		}
+		if len(c.Pages) < 6 {
+			t.Fatalf("%s: only %d pages", tpl, len(c.Pages))
+		}
+		slugs := map[string]bool{}
+		for _, p := range c.Pages {
+			slugs[p.Slug] = true
+		}
+		var check func(bs []Block)
+		check = func(bs []Block) {
+			for _, b := range bs {
+				if strings.HasPrefix(b.Href, "page:") && !slugs[strings.TrimPrefix(b.Href, "page:")] {
+					t.Fatalf("%s: dangling internal link %q", tpl, b.Href)
+				}
+				for _, it := range b.Items {
+					if b.Type != "pricing" && strings.HasPrefix(it.Href, "page:") {
+						t.Fatalf("%s: item links do not resolve page: targets", tpl)
+					}
+				}
+			}
+		}
+		used := map[string]bool{}
+		for _, p := range c.Pages {
+			check(p.Blocks)
+			if p.Image != "" {
+				used[p.Image] = true
+			}
+			for _, b := range p.Blocks {
+				if b.Image != "" {
+					used[b.Image] = true
+				}
+				for _, it := range b.Items {
+					if it.Image != "" {
+						used[it.Image] = true
+					}
+				}
+			}
+		}
+		for n := range used {
+			if media[n] == nil {
+				t.Fatalf("%s: image %s has no artwork", tpl, n)
+			}
+		}
+		c.Site.BaseURL = "https://example.com"
+		out := build(t, c, tpl, media)
+		for _, loc := range []string{"fa", "en"} {
+			for _, p := range c.Pages {
+				path := loc + "/" + p.Slug + "/index.html"
+				if p.Slug == "" {
+					path = loc + "/index.html"
+				}
+				h := string(out.Files[path])
+				if h == "" || !strings.Contains(h, "og:image") && p.Image != "" {
+					t.Fatalf("%s: %s missing or lacks og:image", tpl, path)
+				}
+				if strings.Contains(h, "page:") || strings.Contains(h, "<script") {
+					t.Fatalf("%s: %s has an unresolved link or script", tpl, path)
+				}
+			}
+		}
+		if !strings.Contains(string(out.Files["fa/index.html"]), "rel=\"icon\"") {
+			t.Fatalf("%s: no favicon", tpl)
+		}
+	}
+}
+
+func TestStarterMediaIsDeterministicPNG(t *testing.T) {
+	a, b := StarterMedia("blog"), StarterMedia("blog")
+	for n, d := range a {
+		if string(d) != string(b[n]) || len(d) < 1000 || len(d) > 400<<10 || string(d[1:4]) != "PNG" {
+			t.Fatalf("%s: not a stable, reasonably sized PNG (%d bytes)", n, len(d))
+		}
+		if !ValidMediaName(n) {
+			t.Fatalf("invalid media name %s", n)
+		}
+	}
+	if StarterMedia("landing") != nil {
+		t.Fatal("templates without artwork must return none")
+	}
+}
+
+func TestFormatDate(t *testing.T) {
+	for _, c := range []struct{ loc, in, want string }{
+		{"fa", "2026-03-21", "۱ فروردین ۱۴۰۵"},
+		{"fa", "2026-10-12", "۲۰ مهر ۱۴۰۵"},
+		{"en", "2026-09-28", "28 September 2026"},
+		{"fa", "bad", "bad"},
+	} {
+		if got := formatDate(c.loc, c.in); got != c.want {
+			t.Fatalf("%s %s: got %q want %q", c.loc, c.in, got, c.want)
+		}
 	}
 }
