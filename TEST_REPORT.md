@@ -350,3 +350,8 @@ Not run on the owner's VM: a live uninstall and restore. Claude Code's safety cl
 - GitHub Release `v0.8.1` published with six signed assets; from the VM, `releases/latest/download/{install.sh,SHA256SUMS,ngm-linux-amd64}` download and `sha256sum -c` → OK. CI on d5a1a00: success.
 - Owner-authorised VM cleanup applied (`scripts/ops/cleanup_vm.cjs --apply`, `vaultfill clean`): 16 test/old websites, 3 test certificates, test routes/pools/backends/listeners, 35 test tokens, user operator1, 50 old backups (newest 5 kept), 20,000 test vault secrets. Kept: panel (web/front443/panel443, ngm-panel-public, ngm-panel, panel-prod), the four branded sites, owner accounts. `publish_panel.cjs` afterwards: 14/14.
 - Not done: install matrix of the 0.8.1 one-liner on a fresh host (needs a clean machine; CI install job covers it per commit); retiring old KEK versions and old `pre-restore` DB copies (left as is).
+
+## Live Cloudflare check (2026-10-12)
+- With an owner-supplied API token (stored only in the vault; the local file was deleted and never committed) the read-only zone discovery job ran live: Succeeded, 2 zones listed. This is the first live evidence for discovery (token verification path). NOT yet verified live: TXT upsert / DNS-01 issuance, subdomain publish, record update/delete.
+- The token sees two zones, wider than the single zone requested; recommended to re-issue it scoped to one zone.
+- VLESS/XHTTP origin route (api1.1fathii.ir, path /api/pattern-to-decode → https backend, shared front443): deployed with Safe Apply; unknown paths and hosts show the fallback site; a real client handshake was not tested from the dev host.
