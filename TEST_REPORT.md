@@ -344,3 +344,9 @@ Not run on the owner's VM: a live uninstall and restore. Claude Code's safety cl
 - Defects found by the live run and fixed: page cover images missing from builds (`usedMedia`), non-transitive page ordering.
 - Known limitations: Cloudflare features (DNS-01, discovery, subdomain publish) are covered by unit tests with fakes only; no token was available. Starter brands, addresses and phone numbers are fictional placeholders.
 - rc.9 live re-run (p7 skipped): p5_site 15/15, p9_decoy 14/14, p10_features 17/17, p8_security 7/7, p8_origin 8/8. After the suites, `publish_panel.cjs` re-enabled the decoy (it ends every full run for this reason): apex 80/443/9443 → "مشاوران ویلای نور" 200; panel on the secret path 200.
+
+## Final release 0.8.1 (2026-10-12)
+- Server updated rc.9 → 0.8.1 with `ngm update apply` (signature + SHA-256 verified); panel and decoy 200 afterwards.
+- GitHub Release `v0.8.1` published with six signed assets; from the VM, `releases/latest/download/{install.sh,SHA256SUMS,ngm-linux-amd64}` download and `sha256sum -c` → OK. CI on d5a1a00: success.
+- Owner-authorised VM cleanup applied (`scripts/ops/cleanup_vm.cjs --apply`, `vaultfill clean`): 16 test/old websites, 3 test certificates, test routes/pools/backends/listeners, 35 test tokens, user operator1, 50 old backups (newest 5 kept), 20,000 test vault secrets. Kept: panel (web/front443/panel443, ngm-panel-public, ngm-panel, panel-prod), the four branded sites, owner accounts. `publish_panel.cjs` afterwards: 14/14.
+- Not done: install matrix of the 0.8.1 one-liner on a fresh host (needs a clean machine; CI install job covers it per commit); retiring old KEK versions and old `pre-restore` DB copies (left as is).
