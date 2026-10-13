@@ -24,5 +24,16 @@ const src=process.env.NGM_RELEASE_URL||"https://github.com/Saj-1992/ngm/releases
 const t=fs.readFileSync("deploy/install.sh.in","utf8").split("@@PINNED_KEYS@@").join(block).split("@@DEFAULT_SRC@@").join(src);
 fs.writeFileSync(process.argv[1]+"/install.sh",t.replace(/\r\n/g,"\n"));
 ' "$OUT"
+# Regression guard (caught a real bug once): without "--from", install.sh
+# must NOT reject its own built-in default source. A prior version of the
+# template compared SRC against the placeholder text, which after
+# substitution equalled the real default and made the one-line install
+# ("curl ... | sudo sh", no --from) always fail. Run it unprivileged with no
+# args: it must get past the source check and fail on "run as root" instead
+# (reached before any network call), not on "no download source".
+FIRST_LINE=$(sh "$OUT/install.sh" </dev/null 2>&1 | head -1 || true)
+case "$FIRST_LINE" in
+*"no download source"*) echo "release.sh: install.sh rejects its own default source: $FIRST_LINE" >&2; exit 1 ;;
+esac
 (cd "$OUT" && sha256sum ngm-linux-amd64 ngm-linux-arm64 manifest.json manifest.sig install.sh >SHA256SUMS)
 echo "release $V ($CH) in $OUT"

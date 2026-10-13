@@ -151,7 +151,9 @@ Partially closed (alert headlines and job kinds translated; health details, job 
 | 7 Lifecycle | Gate evidence recorded (bootstrap 7 checks, update 7/7, rollback/repair/nginx/uninstall/cli 14/14); open: O-24..O-28 | Evidence in TEST_REPORT Phase 7 |
 | 8 Integration & Release | RC 0.8.1-rc.3 on the VM; CI matrix green (4 OS/arch fresh install, uninstall, cross-host restore, govulncheck); panel published at https://example.test. Stable still needs the production signing key (O-24) | Evidence in TEST_REPORT |
 
-## Open items (consolidated; updated every phase)
+## Open items
+- The 0.8.1 GitHub release's install.sh (no --from) was broken from first publish; 0.8.2 fixes it and is now `latest`. 0.8.1's assets are left as published (immutable tag) but should not be used for the one-line install.
+ (consolidated; updated every phase)
 | # | Item | Origin | Blocking | Status |
 |---|---|---|---|---|
 | O-1 | No Git commit yet; CI workflow never executed on a remote | P1 | Delivery gate | Closed (private repo Saj-1992/ngm; CI green on 50dfb01) |

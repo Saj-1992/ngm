@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2 (development channel)
+### Fixed
+- **The one-line installer never actually worked.** `deploy/install.sh.in`'s "no download source" guard compared `$SRC` against the literal `@@DEFAULT_SRC@@` placeholder text; the release build script substitutes that placeholder everywhere, including inside the guard's own string, so the check always matched the real default URL and `curl ... | sudo sh` (no `--from`) always failed with "no download source: pass --from URL|DIR". Explicit `--from` (used by every CI install job and by every `ngm update`) was unaffected, which is why this was never caught. Found live while installing on a second server. Fixed, with a build-time regression guard in `scripts/release.sh` that runs the built installer and fails the release build if the default source is ever rejected again.
+
 ## 0.8.1 (development channel — final build of this release line)
 ### Removed
 - The Landing and Documentation website templates (ADR-042). Four complete branded templates remain: corporate, blog, portfolio, app showcase.

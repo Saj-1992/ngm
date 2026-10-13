@@ -63,12 +63,40 @@ async function put(local, remote, mode) {
   });
 }
 
+// Streams a remote file to a local path via `cat` over exec (mirrors put()).
+async function get(remote, local) {
+  if (!/^[A-Za-z0-9_./-]+$/.test(remote)) throw new Error("unsafe remote path");
+  const c = await connect();
+  return new Promise((resolve, reject) => {
+    c.exec(`cat '${remote}'`, (err, s) => {
+      if (err) return reject(err);
+      const out = fs.createWriteStream(local + ".part");
+      let exitCode = null;
+      s.stderr.on("data", (d) => process.stderr.write(d));
+      // Resolve only once BOTH the remote process has exited AND the local
+      // write stream has fully flushed — piping a multi-MB file can still be
+      // draining when the 'exit' event fires, so ending the stream there
+      // truncates it.
+      s.on("exit", (code) => { exitCode = code; });
+      s.pipe(out);
+      out.on("finish", () => {
+        c.end();
+        if (exitCode !== 0) return reject(new Error("remote read failed with exit " + exitCode));
+        fs.renameSync(local + ".part", local);
+        resolve(0);
+      });
+      out.on("error", reject);
+    });
+  });
+}
+
 (async () => {
   const [op, ...args] = process.argv.slice(2);
   let code = 2;
   if (op === "exec") code = await exec(args.join(" "));
   else if (op === "put") code = await put(args[0], args[1], args[2]);
-  else console.error("usage: vm.cjs exec <cmd> | put <local> <remote> [mode]");
+  else if (op === "get") code = await get(args[0], args[1]);
+  else console.error("usage: vm.cjs exec <cmd> | put <local> <remote> [mode] | get <remote> <local>");
   process.exit(code);
 })().catch((e) => {
   console.error("vm:", e.message);

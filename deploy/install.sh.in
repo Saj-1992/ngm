@@ -27,7 +27,10 @@ while [ $# -gt 0 ]; do
 	esac
 done
 case "$SRC" in
-"" | "@@DEFAULT_SRC@@") echo "no download source: pass --from URL|DIR" >&2; exit 2 ;;
+# Only an explicit empty --from is an error; SRC always has a real default
+# otherwise (the line above is substituted at release-build time, so
+# comparing against the placeholder here would wrongly match that default).
+"") echo "no download source: pass --from URL|DIR" >&2; exit 2 ;;
 esac
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 for c in openssl sha256sum base64 awk; do
