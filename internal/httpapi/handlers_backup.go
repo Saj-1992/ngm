@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/ngm-gateway/ngm/internal/apierr"
@@ -17,10 +18,14 @@ func (s *Server) registerBackupRoutes() {
 	s.handle("GET", "/api/v1/backups", "backups.read", s.listBackups)
 	s.handle("POST", "/api/v1/backups", "backups.create", s.createBackup)
 	s.handle("GET", "/api/v1/backups/settings", "backups.read", s.getBackupSettings)
+	s.handle("GET", "/api/v1/backups/remote", "backups.read", s.getBackupRemote)
+	s.handle("PUT", "/api/v1/backups/remote", "settings.write", s.putBackupRemote)
+	s.handle("POST", "/api/v1/backups/remote/test", "settings.write", s.testBackupRemote)
 	s.handle("PUT", "/api/v1/backups/schedule", "settings.write", s.putBackupSchedule)
 	s.handle("POST", "/api/v1/backups/passphrase", "settings.write", s.setBackupPassphrase)
 	s.handle("GET", "/api/v1/backups/{id}/download", "backups.create", s.downloadBackup)
 	s.handle("POST", "/api/v1/backups/{id}/verify", "backups.read", s.verifyBackup)
+	s.handle("POST", "/api/v1/backups/{id}/upload", "backups.create", s.uploadBackupRemote)
 	s.handle("DELETE", "/api/v1/backups/{id}", "backups.create", s.deleteBackup)
 }
 
@@ -151,4 +156,49 @@ func auditEvent(r *http.Request, action, targetKind, targetID string, ctx map[st
 		}
 	}
 	return e
+}
+
+func (s *Server) getBackupRemote(w http.ResponseWriter, r *http.Request) error {
+	cfg, err := s.backups().Remote(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Server) putBackupRemote(w http.ResponseWriter, r *http.Request) error {
+	var in backup.RemoteInput
+	if err := decodeJSON(r, &in); err != nil {
+		return err
+	}
+	cfg, err := s.backups().SetRemote(r.Context(), in)
+	if err != nil {
+		return apierr.BadRequest(err.Error())
+	}
+	_, _ = s.d.Audit.Record(r.Context(), auditEvent(r, "backup.remote_update", "backup_remote", "global", map[string]any{"enabled": cfg.Enabled, "bucket": cfg.Bucket}))
+	return writeJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Server) testBackupRemote(w http.ResponseWriter, r *http.Request) error {
+	if err := s.backups().TestRemote(r.Context()); err != nil {
+		return apierr.BadRequest(err.Error())
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) uploadBackupRemote(w http.ResponseWriter, r *http.Request) error {
+	id, err := validID(r)
+	if err != nil {
+		return err
+	}
+	b := s.backups()
+	a, err := b.Get(r.Context(), id)
+	if err != nil {
+		return mapBackupError(err)
+	}
+	key, err := b.UploadRemote(r.Context(), id, filepath.Join(s.d.Config.Paths.Backups, a.FileName), a.SHA256)
+	if err != nil {
+		return apierr.BadRequest(err.Error())
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"ok": true, "remote_key": key})
 }

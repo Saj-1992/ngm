@@ -1,40 +1,43 @@
-import { useCallback } from "react";
+import { Suspense, lazy, useCallback } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { ErrorState, LoadingState, PlannedState } from "@/components/States";
 import { Button, PageHeader } from "@/components/ui/primitives";
+import { AppTooltipProvider } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
 import { api } from "@/lib/api";
 import { useAsync, useLiveEvents } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { navGroups } from "@/nav";
-import { AuditPage } from "@/pages/Audit";
 import { LoginPage, MfaEnrollPage, MfaVerifyPage } from "@/pages/AuthPages";
 import { Dashboard } from "@/pages/Dashboard";
-import { BackendsPage } from "@/pages/gateway/Backends";
-import { CertificatesPage } from "@/pages/gateway/Certificates";
-import { DeploymentsPage } from "@/pages/gateway/Deployments";
-import { ListenersPage } from "@/pages/gateway/Listeners";
-import { RoutesPage } from "@/pages/gateway/Routes";
-import { SimulationPage } from "@/pages/gateway/Simulation";
-import { RolesPage } from "@/pages/Roles";
-import { SettingsPage } from "@/pages/Settings";
 import { SetupPage } from "@/pages/Setup";
-import { UsersPage } from "@/pages/Users";
-import { BackupsPage } from "@/pages/ops/Backups";
-import { DnsPage } from "@/pages/web/Dns";
-import { DomainsPage } from "@/pages/web/Domains";
-import { CloudflareZonesPage } from "@/pages/web/CloudflareZones";
-import { WebsiteDetailPage, WebsitesPage } from "@/pages/web/Websites";
-import { FirewallPage } from "@/pages/ops/Firewall";
-import { RecoveryPage } from "@/pages/ops/Recovery";
 import { ConfirmHost } from "@/components/Confirm";
 import { CommandPalette } from "@/components/CommandPalette";
-import { MonitoringPage } from "@/pages/ops6/Monitoring";
-import { LogsPage } from "@/pages/ops6/Logs";
-import { PerformancePage } from "@/pages/ops6/Performance";
-import { TopologyPage } from "@/pages/ops6/Topology";
-import { HelpPage } from "@/pages/ops6/Help";
+
+const AuditPage = lazy(() => import("@/pages/Audit").then((m) => ({ default: m.AuditPage })));
+const BackendsPage = lazy(() => import("@/pages/gateway/Backends").then((m) => ({ default: m.BackendsPage })));
+const CertificatesPage = lazy(() => import("@/pages/gateway/Certificates").then((m) => ({ default: m.CertificatesPage })));
+const DeploymentsPage = lazy(() => import("@/pages/gateway/Deployments").then((m) => ({ default: m.DeploymentsPage })));
+const ListenersPage = lazy(() => import("@/pages/gateway/Listeners").then((m) => ({ default: m.ListenersPage })));
+const RoutesPage = lazy(() => import("@/pages/gateway/Routes").then((m) => ({ default: m.RoutesPage })));
+const SimulationPage = lazy(() => import("@/pages/gateway/Simulation").then((m) => ({ default: m.SimulationPage })));
+const RolesPage = lazy(() => import("@/pages/Roles").then((m) => ({ default: m.RolesPage })));
+const SettingsPage = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const UsersPage = lazy(() => import("@/pages/Users").then((m) => ({ default: m.UsersPage })));
+const BackupsPage = lazy(() => import("@/pages/ops/Backups").then((m) => ({ default: m.BackupsPage })));
+const FirewallPage = lazy(() => import("@/pages/ops/Firewall").then((m) => ({ default: m.FirewallPage })));
+const RecoveryPage = lazy(() => import("@/pages/ops/Recovery").then((m) => ({ default: m.RecoveryPage })));
+const DnsPage = lazy(() => import("@/pages/web/Dns").then((m) => ({ default: m.DnsPage })));
+const DomainsPage = lazy(() => import("@/pages/web/Domains").then((m) => ({ default: m.DomainsPage })));
+const CloudflareZonesPage = lazy(() => import("@/pages/web/CloudflareZones").then((m) => ({ default: m.CloudflareZonesPage })));
+const WebsitesPage = lazy(() => import("@/pages/web/Websites").then((m) => ({ default: m.WebsitesPage })));
+const WebsiteDetailPage = lazy(() => import("@/pages/web/Websites").then((m) => ({ default: m.WebsiteDetailPage })));
+const MonitoringPage = lazy(() => import("@/pages/ops6/Monitoring").then((m) => ({ default: m.MonitoringPage })));
+const LogsPage = lazy(() => import("@/pages/ops6/Logs").then((m) => ({ default: m.LogsPage })));
+const PerformancePage = lazy(() => import("@/pages/ops6/Performance").then((m) => ({ default: m.PerformancePage })));
+const TopologyPage = lazy(() => import("@/pages/ops6/Topology").then((m) => ({ default: m.TopologyPage })));
+const HelpPage = lazy(() => import("@/pages/ops6/Help").then((m) => ({ default: m.HelpPage })));
 
 function NotFound() {
   const { t } = useI18n();
@@ -72,7 +75,8 @@ function Console() {
     <Layout live={live}>
       <ConfirmHost />
       <CommandPalette />
-      <Routes>
+      <Suspense fallback={<LoadingState />}>
+        <Routes>
         <Route path="/" element={<Dashboard health={health} version={version} jobs={jobs} />} />
         <Route path="/ops/deployments" element={<DeploymentsPage jobs={jobs} />} />
         <Route path="/ops/firewall" element={<FirewallPage />} />
@@ -113,6 +117,7 @@ function Console() {
         ))}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
     </Layout>
   );
 }
@@ -122,6 +127,14 @@ function Console() {
  * The server enforces every rule; this only chooses the right screen.
  */
 export function App() {
+  return (
+    <AppTooltipProvider>
+      <AppInner />
+    </AppTooltipProvider>
+  );
+}
+
+function AppInner() {
   const { state, refresh } = useSession();
   const loc = useLocation();
   if (state.status === "loading") return <LoadingState />;

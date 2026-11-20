@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,6 +60,8 @@ type CompileInput struct {
 	// ordinary site to crawlers and probes.
 	FallbackSite   string
 	FallbackCertID string
+	// RealIP configures ngx_http_realip_module for traffic behind CDNs/LBs.
+	RealIP *RealIPConfig
 }
 
 func (in CompileInput) fallback() bool { return in.FallbackSite != "" && in.FallbackCertID != "" }
@@ -212,6 +215,29 @@ func Compile(p *Plan, issues []Issue, caps Caps, in CompileInput) (*Output, erro
 	hb.f(0, "map $http_%s $ngm_probe_generation { default \"\"; \"%s\" \"%s\"; }", strings.ToLower(strings.ReplaceAll(ProbeHdr, "-", "_")), in.ProbeToken, in.GenID)
 	writeClientMap(&hb, "$ngm_client", in.AnonymizeIP)
 	hb.f(0, "log_format ngm_http escape=json %s;", httpLogFormat)
+	if in.RealIP != nil && in.RealIP.Enabled {
+		if err := ValidateRealIP(*in.RealIP); err != nil {
+			return nil, fmt.Errorf("invalid real_ip config: %w", err)
+		}
+		for _, cidr := range in.RealIP.TrustedCIDRs {
+			hb.f(0, "set_real_ip_from %s;", cidr)
+		}
+		hb.f(0, "real_ip_header %s;", in.RealIP.Header)
+		if in.RealIP.Recursive {
+			hb.f(0, "real_ip_recursive on;")
+		}
+	}
+	var rlRoutes []string
+	for id, r := range p.RouteByID {
+		if r.Enabled && (r.Protocol == ProtoHTTP || r.Protocol == ProtoTLSTerminate) && r.Options.RateLimitRPS > 0 {
+			rlRoutes = append(rlRoutes, id)
+		}
+	}
+	sort.Strings(rlRoutes)
+	for _, id := range rlRoutes {
+		r := p.RouteByID[id]
+		hb.f(0, "limit_req_zone $binary_remote_addr zone=%s:2m rate=%dr/s;", rateZoneName(r.ID), r.Options.RateLimitRPS)
+	}
 	for _, d := range in.PerfHTTP {
 		hb.f(0, "%s", d)
 	}
@@ -450,7 +476,7 @@ func writeVhost(x *w, p *Plan, caps Caps, in CompileInput, l *Listener, bind str
 		if r.DestKind == DestWebsite {
 			writeWebsite(x, r, loc.Path)
 		} else {
-			writeHTTPRoute(x, p, r, ups)
+			writeHTTPRoute(x, p, r, loc, ups)
 		}
 		x.f(1, "}")
 	}
@@ -492,8 +518,84 @@ func destConnectTimeout(r *Route, ix *Index) int {
 	return 5000
 }
 
-func writeHTTPRoute(x *w, p *Plan, r *Route, ups map[string]bool) {
+func rateZoneName(id string) string {
+	return "ngm_rl_" + strings.ToLower(id)
+}
+
+func sortedHeaderKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+func writeRoutePolicies(x *w, r *Route, loc Location) {
+	for _, cidr := range r.Options.IPDeny {
+		x.f(2, "deny %s;", cidr)
+	}
+	for _, cidr := range r.Options.IPAllow {
+		x.f(2, "allow %s;", cidr)
+	}
+	if len(r.Options.IPAllow) > 0 {
+		x.f(2, "deny all;")
+	}
+	if r.Options.RateLimitRPS > 0 {
+		burst := r.Options.RateLimitBurst
+		if burst <= 0 {
+			burst = r.Options.RateLimitRPS * 2
+		}
+		x.f(2, "limit_req zone=%s burst=%d nodelay;", rateZoneName(r.ID), burst)
+		x.f(2, "limit_req_status 429;")
+	}
+	if r.Options.Gzip != nil && *r.Options.Gzip {
+		x.f(2, "gzip on;")
+		x.f(2, "gzip_vary on;")
+		x.f(2, "gzip_proxied any;")
+		x.f(2, "gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss image/svg+xml;")
+	}
+	if r.Options.CORS != nil && r.Options.CORS.Enabled {
+		c := r.Options.CORS
+		origins := strings.Join(c.AllowOrigins, ",")
+		if len(c.AllowOrigins) == 1 {
+			origins = c.AllowOrigins[0]
+		}
+		methods := "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+		if len(c.AllowMethods) > 0 {
+			methods = strings.Join(c.AllowMethods, ", ")
+		}
+		hdrs := "Authorization, Content-Type, X-Requested-With"
+		if len(c.AllowHeaders) > 0 {
+			hdrs = strings.Join(c.AllowHeaders, ", ")
+		}
+		x.f(2, `add_header Access-Control-Allow-Origin "%s" always;`, origins)
+		x.f(2, `add_header Access-Control-Allow-Methods "%s" always;`, methods)
+		x.f(2, `add_header Access-Control-Allow-Headers "%s" always;`, hdrs)
+		if c.AllowCredentials {
+			x.f(2, `add_header Access-Control-Allow-Credentials "true" always;`)
+		}
+		if c.MaxAgeSec > 0 {
+			x.f(2, `add_header Access-Control-Max-Age "%d" always;`, c.MaxAgeSec)
+		}
+		x.f(2, `if ($request_method = OPTIONS) { return 204; }`)
+	}
+	for _, k := range sortedHeaderKeys(r.Options.ResponseHeaders) {
+		x.f(2, `add_header %s "%s" always;`, k, r.Options.ResponseHeaders[k])
+	}
+	if r.Options.StripPrefix && !loc.Exact && loc.Path != "/" {
+		pfx := strings.TrimSuffix(loc.Path, "/")
+		if pfx != "" {
+			q := regexp.QuoteMeta(pfx)
+			x.f(2, "rewrite ^%s(/.*)$ $1 break;", q)
+			x.f(2, "rewrite ^%s$ / break;", q)
+		}
+	}
+}
+
+func writeHTTPRoute(x *w, p *Plan, r *Route, loc Location, ups map[string]bool) {
 	ix := p.Ix
+	writeRoutePolicies(x, r, loc)
 	switch r.DestKind {
 	case DestReject:
 		x.f(2, "return 444;")
@@ -518,6 +620,34 @@ func writeHTTPRoute(x *w, p *Plan, r *Route, ups map[string]bool) {
 	if ep != nil && ep.Transport == "https" {
 		scheme = "https"
 	}
+	if r.Options.GRPC {
+		gScheme := "grpc"
+		if scheme == "https" {
+			gScheme = "grpcs"
+		}
+		x.f(2, "grpc_pass %s://%s;", gScheme, upName("ngm_up_", r.DestID))
+		if r.Options.PreserveHost == nil || *r.Options.PreserveHost {
+			x.f(2, "grpc_set_header Host $host;")
+		}
+		x.f(2, "grpc_set_header X-Real-IP $remote_addr;")
+		x.f(2, "grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;")
+		x.f(2, "grpc_set_header X-Forwarded-Proto $scheme;")
+		x.f(2, "grpc_set_header %s \"\";", ProbeHdr)
+		for _, k := range sortedHeaderKeys(r.Options.RequestHeaders) {
+			x.f(2, `grpc_set_header %s "%s";`, k, r.Options.RequestHeaders[k])
+		}
+		ct, rt, st := 5000, 60000, 60000
+		if r.DestKind == DestEndpoint && ep != nil {
+			ct, rt, st = ep.ConnectTimeoutMS, ep.ReadTimeoutMS, ep.WriteTimeoutMS
+		}
+		x.f(2, "grpc_connect_timeout %s;", ms(r.Options.ConnectTimeoutMS, ct))
+		x.f(2, "grpc_read_timeout %s;", ms(r.Options.ReadTimeoutMS, rt))
+		x.f(2, "grpc_send_timeout %s;", ms(r.Options.SendTimeoutMS, st))
+		if r.Options.ClientMaxBodyMB > 0 {
+			x.f(2, "client_max_body_size %dm;", r.Options.ClientMaxBodyMB)
+		}
+		return
+	}
 	x.f(2, "proxy_pass %s://%s;", scheme, upName("ngm_up_", r.DestID))
 	x.f(2, "proxy_http_version 1.1;")
 	if r.Options.PreserveHost == nil || *r.Options.PreserveHost {
@@ -529,6 +659,9 @@ func writeHTTPRoute(x *w, p *Plan, r *Route, ups map[string]bool) {
 	x.f(2, "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;")
 	x.f(2, "proxy_set_header X-Forwarded-Proto $scheme;")
 	x.f(2, "proxy_set_header %s \"\";", ProbeHdr) // never forward the probe secret
+	for _, k := range sortedHeaderKeys(r.Options.RequestHeaders) {
+		x.f(2, `proxy_set_header %s "%s";`, k, r.Options.RequestHeaders[k])
+	}
 	if r.Options.WebSocket {
 		x.f(2, "proxy_set_header Upgrade $http_upgrade;")
 		x.f(2, "proxy_set_header Connection $ngm_connection_upgrade;")

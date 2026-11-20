@@ -30,6 +30,8 @@ func (s *Server) registerAuthRoutes() {
 	s.handle("POST", "/api/v1/auth/mfa/verify", permPending, s.postMFAVerify)
 	s.handle("POST", "/api/v1/auth/step-up", permActiveUser, s.postStepUp)
 	s.handle("POST", "/api/v1/auth/password", permActiveUser, s.postPassword)
+	s.handle("GET", "/api/v1/auth/mfa/recovery-codes/status", permActiveUser, s.getRecoveryCodeStatus)
+	s.handle("POST", "/api/v1/auth/mfa/recovery-codes", permActiveUser, s.postRecoveryCodes)
 
 	s.handle("GET", "/api/v1/users", "users.read", s.listUsers)
 	s.handle("POST", "/api/v1/users", "users.write", s.createUser)
@@ -673,4 +675,26 @@ func (s *Server) count(r *http.Request, q string, args ...any) int {
 	var n int
 	_ = s.d.DB.QueryRowContext(r.Context(), q, args...).Scan(&n)
 	return n
+}
+
+func (s *Server) getRecoveryCodeStatus(w http.ResponseWriter, r *http.Request) error {
+	p := PrincipalFrom(r.Context())
+	n, err := s.d.Auth.RecoveryCodeCount(r.Context(), p.UserID)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"remaining": n})
+}
+
+func (s *Server) postRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
+	p := PrincipalFrom(r.Context())
+	if !p.StepUpFresh(s.d.Now()) {
+		return apierr.New(http.StatusForbidden, "step_up_required", "recent two-factor verification required").
+			WithDetails(map[string]any{"window_seconds": int(auth.StepUpWindow.Seconds())})
+	}
+	codes, err := s.d.Auth.RegenerateRecoveryCodes(r.Context(), p)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"codes": codes})
 }

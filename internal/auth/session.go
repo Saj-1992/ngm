@@ -2,8 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -395,8 +398,13 @@ func (s *Service) VerifyMFA(ctx context.Context, p *Principal, code string, ci C
 	}
 	var issue *SessionIssue
 	err := s.db.Tx(ctx, func(tx *sql.Tx) error {
+		usedRecovery := false
 		if err := s.verifyUserTOTP(ctx, tx, p.UserID, code); err != nil {
-			return err
+			if errors.Is(err, ErrInvalidCode) && s.useRecoveryCodeTx(ctx, tx, p.UserID, code) == nil {
+				usedRecovery = true
+			} else {
+				return err
+			}
 		}
 		t := s.now()
 		var err error
@@ -404,7 +412,11 @@ func (s *Service) VerifyMFA(ctx context.Context, p *Principal, code string, ci C
 		if err != nil {
 			return err
 		}
-		return s.auditTx(ctx, tx, p, "auth.mfa_verify", "user", p.UserID, "success", nil)
+		act := "auth.mfa_verify"
+		if usedRecovery {
+			act = "auth.mfa_recovery"
+		}
+		return s.auditTx(ctx, tx, p, act, "user", p.UserID, "success", nil)
 	})
 	if errors.Is(err, ErrInvalidCode) {
 		s.auditMFA(ctx, p, "auth.mfa_verify", "failure")
@@ -442,4 +454,92 @@ func (s *Service) StepUp(ctx context.Context, p *Principal, code string) (time.T
 
 func (s *Service) auditMFA(ctx context.Context, p *Principal, action, result string) {
 	_, _ = s.audit.Record(ctx, audit.Event{ActorKind: "user", ActorID: p.UserID, Action: action, TargetKind: "user", TargetID: p.UserID, Result: result, RequestID: RequestIDFrom(ctx)})
+}
+
+const recoveryAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+func normalizeRecoveryCode(c string) string {
+	c = strings.ToUpper(strings.TrimSpace(c))
+	c = strings.ReplaceAll(c, "-", "")
+	c = strings.ReplaceAll(c, " ", "")
+	return c
+}
+
+func hashRecoveryCode(userID, norm string) string {
+	h := sha256.Sum256([]byte("ngm-recovery:" + userID + ":" + norm))
+	return hex.EncodeToString(h[:])
+}
+
+func newRecoveryCode() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	var out [9]byte
+	for i := 0; i < 4; i++ {
+		out[i] = recoveryAlphabet[int(b[i])%len(recoveryAlphabet)]
+	}
+	out[4] = '-'
+	for i := 0; i < 4; i++ {
+		out[5+i] = recoveryAlphabet[int(b[4+i])%len(recoveryAlphabet)]
+	}
+	return string(out[:]), nil
+}
+
+func (s *Service) useRecoveryCodeTx(ctx context.Context, tx *sql.Tx, userID, code string) error {
+	norm := normalizeRecoveryCode(code)
+	if len(norm) != 8 {
+		return ErrInvalidCode
+	}
+	h := hashRecoveryCode(userID, norm)
+	res, err := tx.ExecContext(ctx, "UPDATE mfa_recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL",
+		store.FormatTime(s.now()), userID, h)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrInvalidCode
+	}
+	return nil
+}
+
+// RegenerateRecoveryCodes replaces all recovery codes for the user and returns
+// the 8 plaintext codes once.
+func (s *Service) RegenerateRecoveryCodes(ctx context.Context, p *Principal) ([]string, error) {
+	if p == nil || p.Kind != "user" || p.Stage != "active" {
+		return nil, ErrWrongStage
+	}
+	codes := make([]string, 8)
+	for i := range codes {
+		c, err := newRecoveryCode()
+		if err != nil {
+			return nil, err
+		}
+		codes[i] = c
+	}
+	err := s.db.Tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM mfa_recovery_codes WHERE user_id=?", p.UserID); err != nil {
+			return err
+		}
+		now := store.FormatTime(s.now())
+		for _, c := range codes {
+			h := hashRecoveryCode(p.UserID, normalizeRecoveryCode(c))
+			if _, err := tx.ExecContext(ctx, "INSERT INTO mfa_recovery_codes(id,user_id,code_hash,created_at) VALUES(?,?,?,?)",
+				ids.New(), p.UserID, h, now); err != nil {
+				return err
+			}
+		}
+		return s.auditTx(ctx, tx, p, "auth.mfa_recovery_regen", "user", p.UserID, "success", nil)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return codes, nil
+}
+
+// RecoveryCodeCount returns the number of unused MFA recovery codes for userID.
+func (s *Service) RecoveryCodeCount(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM mfa_recovery_codes WHERE user_id=? AND used_at IS NULL", userID).Scan(&n)
+	return n, err
 }

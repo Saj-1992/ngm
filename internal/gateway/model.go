@@ -78,18 +78,47 @@ type Match struct {
 	Value    string `json:"value"`
 }
 
+// CORSPolicy configures Cross-Origin Resource Sharing headers on an HTTP route.
+type CORSPolicy struct {
+	Enabled          bool     `json:"enabled"`
+	AllowOrigins     []string `json:"allow_origins,omitempty"`
+	AllowMethods     []string `json:"allow_methods,omitempty"`
+	AllowHeaders     []string `json:"allow_headers,omitempty"`
+	AllowCredentials bool     `json:"allow_credentials,omitempty"`
+	MaxAgeSec        int      `json:"max_age_s,omitempty"`
+}
+
+// RealIPConfig configures ngx_http_realip_module in the http context so Nginx
+// recovers client IPs behind trusted reverse proxies or CDNs (e.g. Cloudflare).
+type RealIPConfig struct {
+	Enabled      bool     `json:"enabled"`
+	Header       string   `json:"header"`        // e.g. CF-Connecting-IP, X-Forwarded-For, X-Real-IP
+	TrustedCIDRs []string `json:"trusted_cidrs"` // validated IP/CIDR entries
+	Recursive    bool     `json:"recursive"`
+}
+
 // RouteOptions are per-route knobs.
 type RouteOptions struct {
-	WebSocket         bool   `json:"websocket,omitempty"`
-	PreserveHost      *bool  `json:"preserve_host,omitempty"` // default true
-	ConnectTimeoutMS  int    `json:"connect_timeout_ms,omitempty"`
-	ReadTimeoutMS     int    `json:"read_timeout_ms,omitempty"`
-	SendTimeoutMS     int    `json:"send_timeout_ms,omitempty"`
-	ClientMaxBodyMB   int    `json:"client_max_body_mb,omitempty"`
-	RedirectURL       string `json:"redirect_url,omitempty"`
-	RedirectCode      int    `json:"redirect_code,omitempty"`
-	StreamTimeoutMS   int    `json:"stream_timeout_ms,omitempty"`
-	BackendProxyProto bool   `json:"backend_proxy_protocol,omitempty"` // passthrough backend accepts PROXY v1
+	WebSocket         bool              `json:"websocket,omitempty"`
+	PreserveHost      *bool             `json:"preserve_host,omitempty"` // default true
+	ConnectTimeoutMS  int               `json:"connect_timeout_ms,omitempty"`
+	ReadTimeoutMS     int               `json:"read_timeout_ms,omitempty"`
+	SendTimeoutMS     int               `json:"send_timeout_ms,omitempty"`
+	ClientMaxBodyMB   int               `json:"client_max_body_mb,omitempty"`
+	RedirectURL       string            `json:"redirect_url,omitempty"`
+	RedirectCode      int               `json:"redirect_code,omitempty"`
+	StreamTimeoutMS   int               `json:"stream_timeout_ms,omitempty"`
+	BackendProxyProto bool              `json:"backend_proxy_protocol,omitempty"` // passthrough backend accepts PROXY v1
+	StripPrefix       bool              `json:"strip_prefix,omitempty"`
+	IPAllow           []string          `json:"ip_allow,omitempty"`
+	IPDeny            []string          `json:"ip_deny,omitempty"`
+	RateLimitRPS      int               `json:"rate_limit_rps,omitempty"`
+	RateLimitBurst    int               `json:"rate_limit_burst,omitempty"`
+	Gzip              *bool             `json:"gzip,omitempty"`
+	GRPC              bool              `json:"grpc,omitempty"`
+	RequestHeaders    map[string]string `json:"request_headers,omitempty"`
+	ResponseHeaders   map[string]string `json:"response_headers,omitempty"`
+	CORS              *CORSPolicy       `json:"cors,omitempty"`
 }
 
 // Route connects a listener and match conditions to a destination.

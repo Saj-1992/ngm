@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { EmptyState, ErrorState, LoadingState } from "@/components/States";
 import { Check, Field, FormError, Input, IssueList, Modal, Select, Textarea } from "@/components/ui/form";
 import { Button, Card, Ltr, PageHeader, cn } from "@/components/ui/primitives";
+import { HelpTip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
 import type { MessageKey } from "@/i18n/messages";
 import { gw, web, type Website, type Certificate, type DestKind, type Endpoint, type Issue, type Listener, type Match, type Pool, type Protocol, type Route, type RouteInput } from "@/lib/api";
@@ -31,6 +32,19 @@ type Draft = {
   name: string; listener_id: string; protocol: Protocol; hosts: string; paths: string; sni: string; alpn: string; fallback: boolean;
   dest: DestKind; dest_id: string; redirect_url: string; redirect_code: number; certificate_id: string; websocket: boolean; preserve_host: boolean;
   backend_proxy_protocol: boolean; priority: number;
+  strip_prefix: boolean; ip_allow: string; ip_deny: string; rate_limit_rps: number; rate_limit_burst: number;
+  gzip: boolean; grpc: boolean; cors_enabled: boolean; cors_origins: string; cors_creds: boolean;
+  req_headers: string; res_headers: string;
+};
+
+const fmtHdrs = (m?: Record<string, string>) => m ? Object.entries(m).map(([k, v]) => `${k}: ${v}`).join("\n") : "";
+const parseHdrs = (s: string): Record<string, string> | undefined => {
+  const out: Record<string, string> = {};
+  for (const line of lines(s)) {
+    const idx = line.indexOf(":");
+    if (idx > 0) out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  return Object.keys(out).length ? out : undefined;
 };
 
 function toDraft(r: Route | undefined, listeners: Listener[]): Draft {
@@ -43,6 +57,18 @@ function toDraft(r: Route | undefined, listeners: Listener[]): Draft {
     dest: r?.destination_kind ?? "pool", dest_id: r?.destination_id ?? "", redirect_url: r?.options.redirect_url ?? "", redirect_code: r?.options.redirect_code ?? 308,
     certificate_id: r?.certificate_id ?? "", websocket: r?.options.websocket ?? false, preserve_host: r?.options.preserve_host ?? true,
     backend_proxy_protocol: r?.options.backend_proxy_protocol ?? false, priority: r?.priority ?? 100,
+    strip_prefix: r?.options.strip_prefix ?? false,
+    ip_allow: (r?.options.ip_allow ?? []).join("\n"),
+    ip_deny: (r?.options.ip_deny ?? []).join("\n"),
+    rate_limit_rps: r?.options.rate_limit_rps ?? 0,
+    rate_limit_burst: r?.options.rate_limit_burst ?? 0,
+    gzip: r?.options.gzip ?? false,
+    grpc: r?.options.grpc ?? false,
+    cors_enabled: r?.options.cors?.enabled ?? false,
+    cors_origins: (r?.options.cors?.allow_origins ?? []).join("\n"),
+    cors_creds: r?.options.cors?.allow_credentials ?? false,
+    req_headers: fmtHdrs(r?.options.request_headers),
+    res_headers: fmtHdrs(r?.options.response_headers),
   };
 }
 
@@ -56,16 +82,30 @@ function toInput(d: Draft, enabled: boolean): RouteInput {
   if (d.protocol === "http" || d.protocol === "tls_terminate_http") {
     lines(d.paths).forEach((p) => matches.push(p.startsWith("=") ? { field: "path_exact", operator: "exact", value: p.slice(1) } : { field: "path_prefix", operator: "prefix", value: p }));
   }
+  const httpish = d.protocol === "http" || d.protocol === "tls_terminate_http";
+  const allow = lines(d.ip_allow);
+  const deny = lines(d.ip_deny);
+  const corsOrigins = lines(d.cors_origins);
   return {
     name: d.name.trim(), listener_id: d.listener_id, protocol: d.protocol, priority: Number(d.priority), destination_kind: d.dest,
     destination_id: d.dest === "pool" || d.dest === "endpoint" ? d.dest_id : undefined, is_fallback: d.protocol !== "http" && d.protocol !== "tcp" && d.fallback,
     certificate_id: d.certificate_id || undefined, matches, enabled,
     options: {
-      websocket: (d.protocol === "http" || d.protocol === "tls_terminate_http") && d.websocket ? true : undefined,
+      websocket: httpish && d.websocket ? true : undefined,
       preserve_host: d.preserve_host ? undefined : false,
       redirect_url: d.dest === "redirect" ? d.redirect_url : undefined,
       redirect_code: d.dest === "redirect" ? d.redirect_code : undefined,
       backend_proxy_protocol: d.protocol === "tls_passthrough" && d.backend_proxy_protocol ? true : undefined,
+      strip_prefix: httpish && d.strip_prefix ? true : undefined,
+      ip_allow: allow.length ? allow : undefined,
+      ip_deny: deny.length ? deny : undefined,
+      rate_limit_rps: httpish && d.rate_limit_rps > 0 ? Number(d.rate_limit_rps) : undefined,
+      rate_limit_burst: httpish && d.rate_limit_rps > 0 && d.rate_limit_burst > 0 ? Number(d.rate_limit_burst) : undefined,
+      gzip: httpish && d.gzip ? true : undefined,
+      grpc: httpish && d.grpc ? true : undefined,
+      request_headers: httpish ? parseHdrs(d.req_headers) : undefined,
+      response_headers: httpish ? parseHdrs(d.res_headers) : undefined,
+      cors: httpish && d.cors_enabled ? { enabled: true, allow_origins: corsOrigins.length ? corsOrigins : ["*"], allow_credentials: d.cors_creds } : undefined,
     },
   };
 }
@@ -236,7 +276,48 @@ function RouteBuilder(props: { initial?: Route; listeners: Listener[]; endpoints
             <>
               <Check checked={d.websocket} onChange={(v) => set({ websocket: v })} label={t("gw.websocket")} />
               <Check checked={d.preserve_host} onChange={(v) => set({ preserve_host: v })} label={t("gw.preserveHost")} />
+              <div className="flex items-center gap-2"><Check checked={d.strip_prefix} onChange={(v) => set({ strip_prefix: v })} label={t("gw.stripPrefix")} /><HelpTip text={t("gw.stripPrefixTip")} /></div>
+              <div className="flex items-center gap-2"><Check checked={d.grpc} onChange={(v) => set({ grpc: v })} label={t("gw.grpc")} /><HelpTip text={t("gw.grpcTip")} /></div>
+              <div className="flex items-center gap-2"><Check checked={d.gzip} onChange={(v) => set({ gzip: v })} label={t("gw.gzip")} /><HelpTip text={t("gw.gzipTip")} /></div>
             </>
+          )}
+          {httpish && (
+            <details className="rounded-xl border border-border bg-surface-2/50 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-fg">{t("gw.policies")}</summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={<span className="inline-flex items-center gap-1">{t("gw.rateLimit")}<HelpTip text={t("gw.rateLimitTip")} /></span>}>
+                    {({ id }) => <Input id={id} dir="ltr" type="number" min={0} max={100000} value={d.rate_limit_rps} onChange={(e) => set({ rate_limit_rps: Number(e.target.value) })} />}
+                  </Field>
+                  <Field label={t("gw.rateBurst")}>
+                    {({ id }) => <Input id={id} dir="ltr" type="number" min={0} max={100000} value={d.rate_limit_burst} onChange={(e) => set({ rate_limit_burst: Number(e.target.value) })} />}
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={<span className="inline-flex items-center gap-1">{t("gw.ipAllow")}<HelpTip text={t("gw.ipAllowTip")} /></span>}>
+                    {({ id }) => <Textarea id={id} dir="ltr" rows={2} placeholder="10.0.0.0/8" value={d.ip_allow} onChange={(e) => set({ ip_allow: e.target.value })} />}
+                  </Field>
+                  <Field label={<span className="inline-flex items-center gap-1">{t("gw.ipDeny")}<HelpTip text={t("gw.ipDenyTip")} /></span>}>
+                    {({ id }) => <Textarea id={id} dir="ltr" rows={2} placeholder="192.0.2.1" value={d.ip_deny} onChange={(e) => set({ ip_deny: e.target.value })} />}
+                  </Field>
+                </div>
+                <div className="flex items-center gap-2"><Check checked={d.cors_enabled} onChange={(v) => set({ cors_enabled: v })} label={t("gw.cors")} /><HelpTip text={t("gw.corsTip")} /></div>
+                {d.cors_enabled && (
+                  <div className="flex flex-col gap-2 ps-4">
+                    <Field label={t("gw.corsOrigins")}>{({ id }) => <Textarea id={id} dir="ltr" rows={2} placeholder="https://app.example.com" value={d.cors_origins} onChange={(e) => set({ cors_origins: e.target.value })} />}</Field>
+                    <Check checked={d.cors_creds} onChange={(v) => set({ cors_creds: v })} label={t("gw.corsCreds")} />
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={<span className="inline-flex items-center gap-1">{t("gw.reqHeaders")}<HelpTip text={t("gw.headersTip")} /></span>}>
+                    {({ id }) => <Textarea id={id} dir="ltr" rows={2} placeholder="X-Custom: value" value={d.req_headers} onChange={(e) => set({ req_headers: e.target.value })} />}
+                  </Field>
+                  <Field label={<span className="inline-flex items-center gap-1">{t("gw.resHeaders")}<HelpTip text={t("gw.headersTip")} /></span>}>
+                    {({ id }) => <Textarea id={id} dir="ltr" rows={2} placeholder="X-Frame-Options: DENY" value={d.res_headers} onChange={(e) => set({ res_headers: e.target.value })} />}
+                  </Field>
+                </div>
+              </div>
+            </details>
           )}
           {d.protocol === "tls_passthrough" && <Check checked={d.backend_proxy_protocol} onChange={(v) => set({ backend_proxy_protocol: v })} label={t("gw.backendProxyProto")} />}
           {!needsCert && !httpish && d.protocol !== "tls_passthrough" && <p className="text-sm text-fg-muted">{t("common.none")}</p>}

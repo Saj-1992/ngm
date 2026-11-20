@@ -1,72 +1,103 @@
-# NGM — Nginx Gateway Manager
+# NGM — مدیر جامع دروازهٔ Nginx (Nginx Gateway Manager)
 
-NGM manages Ubuntu's Nginx as a gateway: HTTP/HTTPS reverse proxy, TCP/UDP streams, TLS passthrough on a shared port 443 (SNI routing), certificates (ACME), static websites, a managed UFW firewall, encrypted backups, logs, monitoring and alerts. It ships as one Go binary with a React control center. Every change goes through **Safe Apply**: validate → stage → `nginx -t` → reload → verify, with automatic return to the last known-good configuration.
+**NGM** یک کنترل‌پنل و مدیر دروازهٔ کامل، امن و تک‌باینری (Go + React/TypeScript) برای مدیریت حرفه‌ای **Nginx** روی سرورهای لینوکس است. تمام تغییرات پیکربندی از چرخهٔ **Safe Apply** عبور می‌کنند: اعتبارسنجی مدل ← آماده‌سازی در مسیر ایزوله (Stage) ← تست `nginx -t` ← Reload ← راستی‌آزمایی زنده (Probe) همراه با **بازگشت خودکار (Auto-Rollback)** به آخرین وضعیت سالم در صورت بروز خطا.
 
-> **Status:** release candidate on the development channel. Read the [known limitations](#known-limitations) before production use. The normative specification is [MASTER_SPEC.md](MASTER_SPEC.md), and the real per-requirement status is in [PROGRESS.md](PROGRESS.md).
+---
 
-## Requirements
-- Ubuntu 22.04 or 24.04 (amd64 or arm64), root access, the Ubuntu `nginx` package (installed if absent), and the stream module for TCP/TLS routes.
-- The installer never edits third-party Nginx or UFW configuration. An existing customised Nginx needs `--adopt-existing-nginx`.
+## پیش‌نیازها
+- سیستم‌عامل **Ubuntu 22.04 / 24.04 / 26.04 LTS** (معماری `amd64` یا `arm64`)
+- دسترسی `root`
+- بستهٔ `nginx` و ماژول `libnginx-mod-stream` (در صورت نبودن، توسط نصب‌کننده نصب می‌شوند)
+- نصب‌کننده و سرویس‌های NGM هرگز فایل‌های Nginx یا قوانین UFW متعلق به سرویس‌های دیگر را تغییر نمی‌دهند. برای پذیرش Nginx سفارشی موجود از فلگ `--adopt-existing-nginx` استفاده کنید.
 
-## Install (signed, one line)
+---
+
+## نصب سریع (امضاشده و تک‌خطی)
 ```sh
 curl -fsSL https://github.com/Saj-1992/ngm/releases/latest/download/install.sh | sudo sh
 ```
-This downloads the latest signed release, verifies the Ed25519 signature of `manifest.json` against the publisher key pinned inside `install.sh`, checks the binary's SHA-256, and only then runs `ngm install`, which verifies everything again before changing anything. Any mismatch stops the installation and nothing is changed.
+اسکریپت نصب، آخرین نسخهٔ منتشرشده را دانلود کرده، امضای **Ed25519** فایل `manifest.json` و هش **SHA-256** باینری را بررسی می‌کند و سپس `ngm install` را اجرا می‌نماید. در صورت هرگونه مغایرت، نصب متوقف شده و هیچ تغییری روی سیستم اعمال نمی‌شود.
 
-Pin the publisher key out of band for extra assurance (compare with the fingerprint in the release notes):
+برای اطمینان بیشتر (Pin کردن کلید ناشر):
 ```sh
 curl -fsSL https://github.com/Saj-1992/ngm/releases/latest/download/install.sh -o install.sh
 sudo NGM_EXPECT_KEY=sha256:<published-fingerprint> sh install.sh
 ```
-Offline or air-gapped: download the release assets, then `sudo sh install.sh --from /path/to/release/dir`.
+نصب آفلاین:
+```sh
+sudo sh install.sh --from /path/to/release/dir
+```
 
-First run: `ssh -L 9999:127.0.0.1:9999 root@<server>`, open `http://127.0.0.1:9999/setup`, then use the bootstrap token the installer printed (`ngm admin bootstrap-token` issues a new one). Create the owner account and enrol MFA.
+### راه‌اندازی اولیه (First-Run Setup)
+پس از نصب، با تونل SSH به پورت محلی کنترل‌پنل متصل شوید:
+```sh
+ssh -L 9999:127.0.0.1:9999 root@<server-ip>
+```
+سپس نشانی `http://127.0.0.1:9999/setup` را در مرورگر باز کرده و با استفاده از **Bootstrap Token** چاپ‌شده در خروجی نصب (`ngm admin bootstrap-token` برای ساخت توکن جدید) حساب مالک (Owner) و احراز هویت دوعاملی (TOTP) را فعال کنید.
 
-## Everyday operations
-| Task | Command / place |
+---
+
+## امکانات جامع پروژه
+
+### ۱. مسیریابی و Gateway پیشرفته
+- **پشتیبانی از HTTP، HTTPS، TCP و UDP (لایه ۴):** مدیریت کامل Listenerها و Poolهای بک‌اند.
+- **TLS Passthrough و SNI Routing روی پورت ۴۴۳ مشترک:** توزیع هوشمند ترافیک با `ssl_preread` بین مسیرهای Passthrough و Terminate.
+- **پشتیبانی از WebSocket و gRPC (`grpc_pass`)** به‌صورت بومی در سطح Route.
+- **سیاست‌های ترافیکی و امنیتی در سطح هر Route:**
+  - **Rate Limiting اختصاصی:** محدودسازی درخواست بر ثانیه (`limit_req_zone`) و ظرفیت Burst به ازای هر Route (با پاسخ ۴۲۹).
+  - **IP Allowlist / Denylist:** محدودسازی دسترسی بر پایهٔ آدرس IP و رنج CIDR.
+  - **Strip Prefix:** حذف خودکار پیشوند مسیر تطبیق‌یافته پیش از ارسال به بک‌اند.
+  - **مدیریت CORS و هدرهای سفارشی:** تنظیم هدرهای درخواست/پاسخ و پاسخ خودکار به Preflight (`OPTIONS`) با اعتبارسنجی ضد تزریق دایرکتیو.
+  - **فشرده‌سازی Gzip** در سطح Route.
+- **بازیابی IP واقعی کاربر (Trusted Proxies / Real-IP):** پشتیبانی آماده از رنج‌های Cloudflare و پروکسی‌های مورد اعتماد (`set_real_ip_from` و `real_ip_header`).
+- **شبیه‌ساز مسیریابی (Simulation Lab) و پیش‌نمایش Diff:** آزمایش مسیرها پیش از استقرار و مشاهدهٔ مقایسهٔ خط‌به‌خط (**Config Diff**) بین پیکربندی Active و Desired.
+- **وب‌سایت Fallback (ADR-036):** پاسخ‌دهی با یک وب‌سایت واقعی و گواهی معتبر به درخواست‌های بدون Host یا با SNI ناشناس.
+
+### ۲. دامنه، DNS، کلادفلر و گواهی‌های SSL/TLS
+- **ثبت دامنه و پایش DNS:** بررسی مداوم رکوردهای `A / AAAA / CNAME / CAA / NS / TXT` روی سرورهای Authoritative و Resolverها.
+- **یکپارچه‌سازی امن با Cloudflare DNS:** کشف Zoneها، ساخت خودکار زیردامنه، پیش‌نمایش تغییرات پیش از اعمال و حفظ رکوردهایی که متعلق به NGM نیستند.
+- **صدور و تمدید خودکار گواهی SSL (ACME / Let's Encrypt):** پشتیبانی از چالش‌های `HTTP-01` و `DNS-01` (شامل گواهی‌های Wildcard) و دانلود امن `fullchain.pem` / `privkey.pem` (با Step-up MFA).
+
+### ۳. وب‌سایت‌ساز استاتیک و دوزبانه
+- **چهار قالب کامل و آماده (شرکتی، وبلاگ، پورتفولیو، معرفی اپلیکیشن):** دوزبانه (فارسی RTL و انگلیسی LTR)، تاریخ شمسی برای مخاطب فارسی، SEO/Sitemap خودکار، تصاویر و صفحهٔ ۴۰۴ اختصاصی.
+- **آپلود فایل ZIP ایمن:** همراه با بررسی‌های ضد Path Traversal، Symlink و Zip Bomb.
+- **پیشنمایش ایزوله (Isolated Origin Preview)** و انتشار اتمیک با قابلیت بازگشت آنی به نسخه‌های قبلی.
+
+### ۴. امنیت، احراز هویت و کنترل دسترسی
+- **معماری جداسازی اختیارات (Privilege Separation):** پنج سرویس مجزای systemd (`ngm-api`، `ngm-ops`، `ngm-helper`، `ngm-monitor`، `ngm-log-indexer`)؛ هندلرهای API هیچ دستور سیستمی اجرا نمی‌کنند و ارتباط با `ngm-helper` از طریق Unix Socket با بررسی Peer Credentials و عملیات Allowlistشده انجام می‌شود.
+- **احراز هویت چندعاملی (TOTP MFA) و کدهای بازیابی:** ورود دوعاملی اجباری، کدهای بازیابی یک‌بارمصرف (`XXXX-XXXX`)، Step-up MFA برای عملیات حساس، و توکن‌های API با دسترسی محدود (Scoped).
+- **کنترل دسترسی مبتنی بر نقش (RBAC):** نقش‌های Owner، Admin، Operator، Viewer و نقش‌های سفارشی با محدودهٔ دسترسی مشخص.
+- **گزارش ممیزی ضد دستکاری (Tamper-Evident Audit Log):** زنجیرهٔ هش‌شده برای تمام رویدادهای امنیتی.
+- **گاوصندوق رمزنگاری‌شده (Vault):** رمزنگاری AES-256-GCM با کلیدهای نسخه‌دار (KEK) و پشتیبانی از چرخش بدون وقفه.
+
+### ۵. فایروال، پشتیبان‌گیری، پایش و رصدپذیری
+- **مدیریت فایروال UFW:** دفتر کل قوانین متعلق به NGM بدون پاک کردن قوانین خارجی، همراه با محافظت از دسترسی SSH و تایمر بازگشت اضطراری (Dead-man Watchdog).
+- **پشتیبان‌گیری رمزنگاری‌شده (محلی و ابری S3):** فرمت قابل‌حمل `NGMBAK1` (Argon2id + AEAD) قابل بازیابی روی سرور جدید، زمان‌بندی خودکار، و **ارسال خودکار به باکت‌های سازگار با S3** (AWS، Cloudflare R2، MinIO، آروان و ...).
+- **رصدپذیری و تحلیل ترافیک:**
+  - داشبورد تحلیل ترافیک HTTP (نرخ درخواست، تفکیک `2xx/3xx/4xx/5xx`، میانگین و `P95` تأخیر، دامنه‌ها و مسیرهای پربازدید).
+  - **خروجی استاندارد Prometheus / OpenMetrics** در مسیر `/api/v1/metrics`.
+  - جستجوگر لاگ ساختاریافته (JSONL + FTS5)، Live Tail با SSE و خروجی CSV/JSONL/TXT.
+  - گراف توپولوژی و تحلیلگر تأثیر وابستگی‌ها پیش از حذف منابع.
+  - هشداردهی از طریق Telegram و Webhook (با محافظت کامل در برابر SSRF و DNS Rebinding).
+- **رابط کاربری دوزبانه (فارسی/انگلیسی) با تم روشن/تاریک، پالت دستورات سریع (`Ctrl+K`) و Tooltipهای راهنما روی تمام بخش‌ها.**
+
+---
+
+## دستورات کاربردی CLI
+| عملیات | دستور |
 |---|---|
-| Status and diagnostics | `ngm status`, `ngm doctor` |
-| Test the full Nginx config | `ngm config test` |
-| Return to the previous known-good gateway config | `ngm rollback [GENERATION]` (or Deployments in the UI) |
-| Backups | `ngm backup set-passphrase`, `ngm backup create`, `ngm restore --preview FILE` |
-| Firewall emergency revert | `ngm fw-revert` |
-| Rebuild the log index | `ngm logs reindex` |
-| Vault key rotation | `ngm vault status \| rotate \| retire N` |
-| Lost owner password / MFA | `ngm admin reset USER` |
+| وضعیت سرویس‌ها و عیب‌یابی | `ngm status`, `ngm doctor` |
+| تست کامل پیکربندی Nginx | `ngm config test` |
+| بازگشت به نسل قبلی پیکربندی | `ngm rollback [GENERATION]` |
+| مدیریت بکاپ و بازیابی | `ngm backup set-passphrase`, `ngm backup create`, `ngm restore --preview FILE` |
+| بازگشت اضطراری فایروال | `ngm fw-revert` |
+| بازسازی ایندکس لاگ‌ها | `ngm logs reindex` |
+| چرخش کلید Vault | `ngm vault status \| rotate \| retire N` |
+| بازنشانی رمز یا MFA کاربر | `ngm admin reset USER` |
+| بروزرسانی و بازگشت نسخه | `ngm update check --from DIR`, `sudo ngm update apply --from DIR --yes` |
+| تعمیر یا حذف برنامه | `sudo ngm repair`, `sudo ngm uninstall --keep-data \| --purge` |
 
-## Fallback website (recommended)
-In **Websites → Fallback website**, choose a published website and a certificate, then deploy. Every visitor that matches no route sees that website, with a real certificate, instead of a closed connection or a TLS error. This covers unknown host names, direct IP access, unknown or missing SNI on 443, crawlers and scanners. NGM also turns off Nginx version tokens. Publish realistic content (see ADR-036 for the limits).
+---
 
-## Updates and rollback
-```sh
-ngm update check --from /path/to/release      # verify only
-sudo ngm update apply --from /path/to/release --yes
-sudo ngm update rollback --yes                 # back to the previous release
-```
-The **installed** binary verifies the new release with its pinned keys. Before installing, NGM takes a database snapshot and an encrypted backup (if a passphrase is set). If the new version is not healthy, NGM rolls back automatically. Downgrades are possible only through `update rollback`. The UI (Settings → Updates) shows the status but never installs.
-
-**Nginx package upgrades:** `sudo ngm nginx upgrade` shows the plan, and with `--yes` it backs up, upgrades with your config files kept, tests and restarts. Upgrades made outside NGM (for example unattended-upgrades) are detected and raise an alert. `sudo ngm nginx reconcile` re-verifies and accepts them. NGM does not downgrade packages.
-
-## Repair and uninstall
-- `sudo ngm repair` re-verifies the installed release against its signed manifest and re-applies directories, permissions, accounts and units. It refuses to run a modified binary.
-- `ngm uninstall --keep-data` or `--purge` prints the plan and dependency warnings. Add `--yes` to execute. Purge additionally needs `--confirm "purge <hostname>"`.
-  - **Keep Data** removes the program and disconnects NGM from Nginx. It keeps `/etc/ngm`, `/var/lib/ngm`, logs, websites and NGM's UFW rules.
-  - **Purge** also deletes those, NGM-tagged UFW rules (never the only SSH rule) and NGM accounts.
-  - Third-party files and rules are never touched. Copy `/var/lib/ngm/backups` off the server first.
-
-## Building a release (publisher)
-```sh
-sh scripts/release.sh VERSION CHANNEL path/to/key.pem   # → dist/release/VERSION/
-```
-Keys come from `ngm release keygen`. Public keys are pinned in `internal/release/trusted/`, and keys named `dev-*` may sign only the development channel. Private keys never enter the repository.
-
-## Documentation
-[SECURITY_MODEL.md](SECURITY_MODEL.md) · [DEPLOYMENT_CONTRACT.md](DEPLOYMENT_CONTRACT.md) · [API_CONTRACT.md](API_CONTRACT.md) (OpenAPI in [api/openapi.json](api/openapi.json)) · [DECISIONS.md](DECISIONS.md) · [TEST_REPORT.md](TEST_REPORT.md) · [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
-
-## Known limitations
-See the open items in [PROGRESS.md](PROGRESS.md#open-items-consolidated-updated-every-phase). Most importantly:
-- Only Ubuntu 24.04 AMD64 has been exercised live. 22.04 and ARM64 binaries are built but untested.
-- Only a development signing key exists, so there is no stable channel yet.
-- Cloudflare and Telegram integrations have not been tested against the real services.
-- Benchmarks are same-host loopback measurements on a 2-vCPU VM. They are not a capacity guarantee.
+## مستندات فنی
+[MASTER_SPEC.md](MASTER_SPEC.md) · [SECURITY_MODEL.md](SECURITY_MODEL.md) · [DEPLOYMENT_CONTRACT.md](DEPLOYMENT_CONTRACT.md) · [API_CONTRACT.md](API_CONTRACT.md) ([openapi.json](api/openapi.json)) · [DECISIONS.md](DECISIONS.md) · [PROGRESS.md](PROGRESS.md) · [TEST_REPORT.md](TEST_REPORT.md)

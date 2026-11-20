@@ -1,10 +1,11 @@
 import { UpdatesCard } from "./ops6/Updates";
 import { NotificationsCard } from "./ops6/Notifications";
-import { Copy, KeyRound, Plus } from "lucide-react";
+import { Copy, KeyRound, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/States";
 import { Field, FormError, Input, Modal } from "@/components/ui/form";
 import { Button, Card, CardHeader, Ltr, PageHeader, cn } from "@/components/ui/primitives";
+import { HelpTip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
 import { api, ApiError } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
@@ -182,10 +183,59 @@ export function SettingsPage() {
       <PageHeader title={t("settings.title")} />
       <div className="grid gap-5 lg:grid-cols-2">
         <PasswordCard />
-        <TokensCard />
+        <RecoveryCodesCard />
+        <div className="lg:col-span-2"><TokensCard /></div>
         <div className="lg:col-span-2"><NotificationsCard /></div>
         <div className="lg:col-span-2"><UpdatesCard /></div>
       </div>
     </>
+  );
+}
+
+function RecoveryCodesCard() {
+  const { t } = useI18n();
+  const status = useAsync(api.recoveryCodeStatus);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const regen = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api.regenerateRecoveryCodes();
+      setCodes(r.codes);
+      status.reload();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title={<span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-fg-muted" aria-hidden />{t("mfa.recoveryTitle")}<HelpTip text={t("mfa.recoveryTip")} /></span>}
+      />
+      <div className="flex flex-col gap-3 p-5 text-sm">
+        {status.data && <p className="text-fg-muted">{t("mfa.recoveryRemaining", { n: status.data.remaining })}</p>}
+        {codes && (
+          <div className="rounded-xl border border-warn/40 bg-warn-soft/40 p-3">
+            <p className="mb-2 text-xs text-warn">{t("mfa.recoveryWarn")}</p>
+            <div dir="ltr" className="grid grid-cols-2 gap-1.5 font-mono text-xs">
+              {codes.map((c) => <div key={c} className="rounded bg-surface px-2 py-1 text-center">{c}</div>)}
+            </div>
+            <Button size="sm" variant="outline" className="mt-3" onClick={() => { void navigator.clipboard.writeText(codes.join("\n")); setCopied(true); }}>
+              <Copy className="size-3.5" aria-hidden />{copied ? t("common.copied") : t("mfa.recoveryCopy")}
+            </Button>
+          </div>
+        )}
+        {err && <FormError>{err}</FormError>}
+        <div>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void regen()}>{t("mfa.recoveryRegen")}</Button>
+        </div>
+      </div>
+    </Card>
   );
 }

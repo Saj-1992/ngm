@@ -581,9 +581,10 @@ func (c *Coordinator) runApply(r *runner) {
 		return
 	}
 	keys := mat.Keys
+	realIP := loadRealIP(ctx, c.DB)
 	out, err := gateway.Compile(plan, issues, caps, gateway.CompileInput{GenID: genID, ProbeToken: token, CertPEM: mat.Chains, DefaultCertID: defaultCert, KeyFile: mat.KeyFile,
 		PerfHTTP: pr.HTTP, PerfServer: pr.HTTPServer, StreamTimeoutMS: perfSec(pv, "stream_proxy_timeout"), StreamConnectMS: perfSec(pv, "stream_proxy_connect_timeout"),
-		FallbackSite: fb.WebsiteID, FallbackCertID: fb.CertificateID})
+		FallbackSite: fb.WebsiteID, FallbackCertID: fb.CertificateID, RealIP: realIP})
 	if err != nil {
 		c.failSafely(r, &failure{Code: "compile_failed", Message: err.Error()})
 		return
@@ -1271,4 +1272,16 @@ func perfSec(v perf.View, name string) int {
 		}
 	}
 	return 0
+}
+
+func loadRealIP(ctx context.Context, db *store.DB) *gateway.RealIPConfig {
+	var raw string
+	if err := db.QueryRowContext(ctx, "SELECT value_json FROM settings WHERE key='gateway.real_ip'").Scan(&raw); err != nil {
+		return nil
+	}
+	var cfg gateway.RealIPConfig
+	if json.Unmarshal([]byte(raw), &cfg) != nil || !cfg.Enabled {
+		return nil
+	}
+	return &cfg
 }

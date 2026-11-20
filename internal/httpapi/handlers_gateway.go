@@ -68,6 +68,9 @@ func (s *Server) registerGatewayRoutes() {
 	s.handle("POST", "/api/v1/deployments/rollback", "deploy.apply", s.rollbackDeployment)
 	s.handle("GET", "/api/v1/gateway/fallback", "gateway.read", s.getFallback)
 	s.handle("PUT", "/api/v1/gateway/fallback", "gateway.write", s.putFallback)
+	s.handle("GET", "/api/v1/gateway/real-ip", "gateway.read", s.getRealIP)
+	s.handle("PUT", "/api/v1/gateway/real-ip", "gateway.write", s.putRealIP)
+	s.handle("GET", "/api/v1/gateway/diff", "gateway.read", s.gatewayDiff)
 }
 
 // mapGWError converts gateway store errors.
@@ -904,4 +907,148 @@ func (s *Server) putFallback(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return s.getFallback(w, r)
+}
+
+func (s *Server) getRealIP(w http.ResponseWriter, r *http.Request) error {
+	var cfg gateway.RealIPConfig
+	var raw string
+	if err := s.d.DB.QueryRowContext(r.Context(), "SELECT value_json FROM settings WHERE key='gateway.real_ip'").Scan(&raw); err == nil {
+		_ = json.Unmarshal([]byte(raw), &cfg)
+	}
+	if cfg.Header == "" {
+		cfg.Header = "CF-Connecting-IP"
+		cfg.Recursive = true
+	}
+	return writeJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Server) putRealIP(w http.ResponseWriter, r *http.Request) error {
+	var in gateway.RealIPConfig
+	if err := decodeJSON(r, &in); err != nil {
+		return err
+	}
+	if err := gateway.ValidateRealIP(in); err != nil {
+		return apierr.BadRequest(err.Error())
+	}
+	b, _ := json.Marshal(in)
+	_, err := s.d.DB.ExecContext(r.Context(), `INSERT INTO settings(key,value_json,updated_at) VALUES('gateway.real_ip',?,?)
+		ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, revision=revision+1, updated_at=excluded.updated_at`,
+		string(b), store.FormatTime(s.d.Now()))
+	if err != nil {
+		return err
+	}
+	_, _ = s.d.Audit.Record(r.Context(), auditEvent(r, "gateway.real_ip_update", "setting", "gateway.real_ip", map[string]any{"enabled": in.Enabled, "header": in.Header, "cidrs": len(in.TrustedCIDRs)}))
+	return s.getRealIP(w, r)
+}
+
+func (s *Server) gatewayDiff(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	_, plan, issues, caps, err := s.buildDesired(ctx)
+	if err != nil {
+		return err
+	}
+	if gateway.HasErrors(issues) {
+		return writeJSON(w, http.StatusOK, map[string]any{"valid": false, "issues": nonNilIssues(issues), "files": map[string]any{}})
+	}
+	certs := map[string]string{}
+	for _, id := range gateway.UsedCertIDs(plan) {
+		certs[id] = "# certificate " + id + "\n"
+	}
+	fb := gwstore.GetFallback(ctx, s.d.DB)
+	if fb.Enabled() {
+		certs[fb.CertificateID] = "# certificate " + fb.CertificateID + "\n"
+	}
+	def := ""
+	if !caps.RejectHandshake {
+		def = "preview-default"
+		certs[def] = "# default certificate\n"
+	}
+	var realIP *gateway.RealIPConfig
+	var rawRIP string
+	if s.d.DB.QueryRowContext(ctx, "SELECT value_json FROM settings WHERE key='gateway.real_ip'").Scan(&rawRIP) == nil {
+		var tmp gateway.RealIPConfig
+		if json.Unmarshal([]byte(rawRIP), &tmp) == nil && tmp.Enabled {
+			realIP = &tmp
+		}
+	}
+	out, err := gateway.Compile(plan, issues, caps, gateway.CompileInput{
+		GenID: "desired-preview", ProbeToken: "preview", CertPEM: certs, DefaultCertID: def,
+		FallbackSite: fb.WebsiteID, FallbackCertID: fb.CertificateID, RealIP: realIP,
+	})
+	if err != nil {
+		return apierr.BadRequest(err.Error())
+	}
+	activeFiles := map[string]string{}
+	var activeGen, filesJSON string
+	if err := s.d.DB.QueryRowContext(ctx, "SELECT id, files_json FROM config_generations WHERE status='active' ORDER BY seq DESC LIMIT 1").Scan(&activeGen, &filesJSON); err == nil {
+		_ = json.Unmarshal([]byte(filesJSON), &activeFiles)
+	}
+	diffs := map[string]any{}
+	for _, name := range []string{gateway.FileHTTP, gateway.FileStream} {
+		oldText := activeFiles[name]
+		newText := string(out.Files[name])
+		diffs[name] = map[string]any{
+			"changed": oldText != newText,
+			"diff":    lineDiff(oldText, newText),
+		}
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{
+		"valid":      true,
+		"active_gen": activeGen,
+		"issues":     issues,
+		"files":      diffs,
+	})
+}
+
+func lineDiff(a, b string) []map[string]any {
+	al := strings.Split(strings.TrimRight(a, "\n"), "\n")
+	bl := strings.Split(strings.TrimRight(b, "\n"), "\n")
+	if a == "" {
+		al = nil
+	}
+	if b == "" {
+		bl = nil
+	}
+	// Myers-like / LCS DP bounded for config files (< 3000 lines).
+	n, m := len(al), len(bl)
+	if n > 2500 || m > 2500 {
+		return []map[string]any{{"op": "info", "text": "diff too large to display inline"}}
+	}
+	dp := make([][]int, n+1)
+	for i := range dp {
+		dp[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if al[i] == bl[j] {
+				dp[i][j] = dp[i+1][j+1] + 1
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i][j] = dp[i+1][j]
+			} else {
+				dp[i][j] = dp[i][j+1]
+			}
+		}
+	}
+	var out []map[string]any
+	i, j := 0, 0
+	for i < n && j < m {
+		if al[i] == bl[j] {
+			out = append(out, map[string]any{"op": "eq", "text": al[i]})
+			i++
+			j++
+		} else if dp[i+1][j] >= dp[i][j+1] {
+			out = append(out, map[string]any{"op": "del", "text": al[i]})
+			i++
+		} else {
+			out = append(out, map[string]any{"op": "add", "text": bl[j]})
+			j++
+		}
+	}
+	for ; i < n; i++ {
+		out = append(out, map[string]any{"op": "del", "text": al[i]})
+	}
+	for ; j < m; j++ {
+		out = append(out, map[string]any{"op": "add", "text": bl[j]})
+	}
+	return out
 }

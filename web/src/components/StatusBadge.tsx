@@ -2,6 +2,7 @@ import { CircleCheck, CircleHelp, CircleMinus, CircleX, TriangleAlert } from "lu
 import type { HealthStatus } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
 import { cn } from "./ui/primitives";
+import { Tip } from "./ui/tooltip";
 
 const styles: Record<HealthStatus, { cls: string; Icon: typeof CircleCheck }> = {
   healthy: { cls: "bg-ok-soft text-ok", Icon: CircleCheck },
@@ -15,16 +16,19 @@ const styles: Record<HealthStatus, { cls: string; Icon: typeof CircleCheck }> = 
 export function StatusBadge({ status, size = "sm" }: { status: HealthStatus; size?: "sm" | "lg" }) {
   const { t } = useI18n();
   const s = styles[status] ?? styles.unknown;
+  const label = t(`status.${status}` as const);
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full font-medium",
-        size === "lg" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs",
-        s.cls,
-      )}
-    >
-      <s.Icon aria-hidden className={size === "lg" ? "size-4" : "size-3.5"} />
-      {t(`status.${status}` as const)}
-    </span>
+    <Tip content={label}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full font-medium",
+          size === "lg" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs",
+          s.cls,
+        )}
+      >
+        <s.Icon aria-hidden className={size === "lg" ? "size-4" : "size-3.5"} />
+        {label}
+      </span>
+    </Tip>
   );
 }

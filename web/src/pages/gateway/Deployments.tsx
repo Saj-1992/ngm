@@ -1,9 +1,10 @@
 import { confirmDialog } from "@/components/Confirm";
-import { CheckCircle2, CircleDashed, FileCode2, Loader2, Rocket, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, FileCode2, GitCompare, Loader2, Rocket, RotateCcw, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorState, LoadingState } from "@/components/States";
 import { Check, FormError, IssueList, Modal } from "@/components/ui/form";
 import { Button, Card, CardHeader, Ltr, PageHeader, cn } from "@/components/ui/primitives";
+import { HelpTip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
 import type { MessageKey } from "@/i18n/messages";
 import { gw, type Generation, type Job, type JobDetail, type JobStep, type Page } from "@/lib/api";
@@ -151,6 +152,8 @@ export function DeploymentsPage({ jobs }: { jobs: AsyncState<Page<Job>> & { relo
         </Card>
       )}
 
+      <DiffCard />
+
       <Card className="mt-5">
         <CardHeader title={t("dep.history")} />
         {gens.status === "error" && !gens.data ? <ErrorState error={gens.error} onRetry={gens.reload} /> : !gens.data ? <LoadingState /> : gens.data.items.length === 0 ? (
@@ -188,5 +191,50 @@ export function DeploymentsPage({ jobs }: { jobs: AsyncState<Page<Job>> & { relo
         </div>
       </Modal>
     </>
+  );
+}
+
+function DiffCard() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<Awaited<ReturnType<typeof gw.diff>> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    if (open && data) { setOpen(false); return; }
+    setBusy(true);
+    try {
+      setData(await gw.diff());
+      setOpen(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="mt-5">
+      <CardHeader
+        title={<span className="inline-flex items-center gap-1.5">{t("dep.diffTitle")}<HelpTip text={t("dep.diffTip")} /></span>}
+        action={<Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}><GitCompare className="size-4" aria-hidden />{t("dep.diffShow")}</Button>}
+      />
+      {open && data && (
+        <div className="flex flex-col gap-4 p-5">
+          {Object.entries(data.files).map(([name, f]) => (
+            <div key={name}>
+              <Ltr className="mb-1 block text-xs font-medium text-fg-muted">{name}</Ltr>
+              {!f.changed ? (
+                <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-fg-muted">{t("dep.diffNoChanges")}</p>
+              ) : (
+                <pre dir="ltr" className="max-h-96 overflow-auto rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs leading-relaxed">
+                  {f.diff.filter((l) => l.op !== "eq").map((l, idx) => (
+                    <div key={idx} className={l.op === "add" ? "bg-ok-soft text-ok" : l.op === "del" ? "bg-bad-soft text-bad" : "text-fg-muted"}>
+                      {l.op === "add" ? "+ " : l.op === "del" ? "- " : "  "}{l.text}
+                    </div>
+                  ))}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

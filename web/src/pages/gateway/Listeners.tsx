@@ -1,9 +1,10 @@
 import { confirmDialog } from "@/components/Confirm";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import { Plus, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/States";
-import { Check, Field, FormError, Input, Modal, Select } from "@/components/ui/form";
-import { Button, Card, Ltr, PageHeader } from "@/components/ui/primitives";
+import { Check, Field, FormError, Input, Modal, Select, Textarea } from "@/components/ui/form";
+import { Button, Card, CardHeader, Ltr, PageHeader } from "@/components/ui/primitives";
+import { HelpTip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
 import type { MessageKey } from "@/i18n/messages";
 import { gw, type Listener, type ListenerKind } from "@/lib/api";
@@ -145,7 +146,87 @@ export function ListenersPage() {
           </div>
         )}
       </Card>
+      <RealIPCard writable={writable} />
       {edit && <ListenerForm initial={edit === "new" ? undefined : edit} onClose={() => setEdit(null)} onDone={ls.reload} />}
     </>
+  );
+}
+
+const CLOUDFLARE_CIDRS = [
+  "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+  "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+  "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+  "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+  "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+  "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+].join("\n");
+
+function RealIPCard({ writable }: { writable: boolean }) {
+  const { t } = useI18n();
+  const cfg = useAsync(gw.realIp);
+  const [enabled, setEnabled] = useState(false);
+  const [header, setHeader] = useState("CF-Connecting-IP");
+  const [cidrs, setCidrs] = useState("");
+  const [recursive, setRecursive] = useState(true);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (cfg.data) {
+      setEnabled(cfg.data.enabled);
+      setHeader(cfg.data.header || "CF-Connecting-IP");
+      setCidrs((cfg.data.trusted_cidrs ?? []).join("\n"));
+      setRecursive(cfg.data.recursive ?? true);
+    }
+  }, [cfg.data]);
+
+  const save = async () => {
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      await gw.setRealIp({
+        enabled,
+        header: header.trim(),
+        trusted_cidrs: cidrs.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+        recursive,
+      });
+      setMsg(t("gw.realIpSaved"));
+      cfg.reload();
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="mt-5">
+      <CardHeader
+        title={<span className="inline-flex items-center gap-2"><Shield className="size-4 text-fg-muted" aria-hidden />{t("gw.realIp")}<HelpTip text={t("gw.realIpTip")} /></span>}
+      />
+      <div className="flex flex-col gap-3 p-5">
+        <Check checked={enabled} onChange={setEnabled} label={t("gw.realIp")} />
+        {enabled && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("gw.realIpHeader")}>
+                {({ id }) => <Input id={id} dir="ltr" value={header} onChange={(e) => setHeader(e.target.value)} />}
+              </Field>
+              <div className="flex items-end">
+                <Button type="button" size="sm" variant="outline" onClick={() => setCidrs(CLOUDFLARE_CIDRS)}>{t("gw.realIpCloudflare")}</Button>
+              </div>
+            </div>
+            <Field label={t("gw.realIpCidrs")}>
+              {({ id }) => <Textarea id={id} dir="ltr" rows={4} value={cidrs} onChange={(e) => setCidrs(e.target.value)} />}
+            </Field>
+          </>
+        )}
+        {err && <FormError>{err}</FormError>}
+        {msg && <p role="status" className="text-sm text-ok">{msg}</p>}
+        {writable && (
+          <div><Button size="sm" variant="primary" disabled={busy} onClick={() => void save()}>{t("common.save")}</Button></div>
+        )}
+      </div>
+    </Card>
   );
 }

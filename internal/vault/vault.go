@@ -45,7 +45,7 @@ var (
 	ErrKeyMismatch   = errors.New("key file does not match recorded check value")
 	ErrInsecureKey   = errors.New("key file permissions are too open")
 	checkPlain       = []byte("ngm-vault-kek-check-v1")
-	validSecretTypes = map[string]bool{"totp": true, "tls_key": true, "backup_key": true, "cloudflare_token": true, "notification": true, "acme_account": true, "generic": true}
+	validSecretTypes = map[string]bool{"totp": true, "tls_key": true, "backup_key": true, "backup_remote": true, "cloudflare_token": true, "notification": true, "acme_account": true, "generic": true}
 )
 
 // Keyring holds loaded KEK versions.

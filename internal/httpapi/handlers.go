@@ -33,6 +33,7 @@ func (s *Server) registerRoutes() {
 	s.registerPerfRoutes()
 	s.registerTopologyRoutes()
 	s.registerUpdateRoutes()
+	s.registerObservabilityRoutes()
 }
 
 // Health statuses (MASTER_SPEC §13.2). Unknown is never reported as healthy.

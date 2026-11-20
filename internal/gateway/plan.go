@@ -520,6 +520,52 @@ func validateRouteCommon(c *checker, r *Route, l *Listener, ix *Index, o BuildOp
 	if r.Options.ClientMaxBodyMB < 0 || r.Options.ClientMaxBodyMB > 10240 {
 		c.err(r.ID, "route_body", "route %q: client body limit must be 0–10240 MB", r.Name)
 	}
+	isHTTP := r.Protocol == ProtoHTTP || r.Protocol == ProtoTLSTerminate
+	if r.Options.StripPrefix {
+		if !isHTTP {
+			c.err(r.ID, "route_strip_prefix_proto", "route %q: strip_prefix applies to HTTP routes only", r.Name)
+		} else {
+			hasNonRootPrefix := false
+			for _, m := range r.Matches {
+				if m.Field == FieldPathPrefix && m.Value != "/" {
+					hasNonRootPrefix = true
+					break
+				}
+			}
+			if !hasNonRootPrefix {
+				c.warn(r.ID, "route_strip_prefix_noprefix", "route %q: strip_prefix has no effect without a non-root path_prefix match", r.Name)
+			}
+		}
+	}
+	if r.Options.GRPC {
+		if !isHTTP || (r.DestKind != DestEndpoint && r.DestKind != DestPool) {
+			c.err(r.ID, "route_grpc_invalid", "route %q: gRPC requires an HTTP/TLS route targeting an endpoint or pool", r.Name)
+		}
+		if r.Options.WebSocket {
+			c.err(r.ID, "route_grpc_ws", "route %q: gRPC and WebSocket cannot be enabled together", r.Name)
+		}
+	}
+	if r.Options.RateLimitRPS < 0 || r.Options.RateLimitRPS > 100_000 || r.Options.RateLimitBurst < 0 || r.Options.RateLimitBurst > 100_000 {
+		c.err(r.ID, "route_rate_limit", "route %q: rate limit RPS and burst must be 0–100000", r.Name)
+	} else if r.Options.RateLimitRPS > 0 && !isHTTP {
+		c.err(r.ID, "route_rate_limit_proto", "route %q: rate limiting applies to HTTP routes only", r.Name)
+	}
+	for _, list := range [][]string{r.Options.IPAllow, r.Options.IPDeny} {
+		for _, entry := range list {
+			if !isValidIPOrCIDR(entry) {
+				c.err(r.ID, "route_ip_cidr", "route %q: invalid IP or CIDR %q", r.Name, entry)
+			}
+		}
+	}
+	validateHeaders(c, r.ID, r.Name, "request", r.Options.RequestHeaders, isHTTP)
+	validateHeaders(c, r.ID, r.Name, "response", r.Options.ResponseHeaders, isHTTP)
+	if r.Options.CORS != nil && r.Options.CORS.Enabled {
+		if !isHTTP {
+			c.err(r.ID, "route_cors_proto", "route %q: CORS applies to HTTP routes only", r.Name)
+		} else {
+			validateCORS(c, r.ID, r.Name, r.Options.CORS)
+		}
+	}
 	if r.Fallback && (l.Kind == KindHTTP || l.Kind == KindHTTPS) {
 		c.warn(r.ID, "route_fallback_http", "on HTTP listeners, routes without a host match form the default server; is_fallback is ignored")
 	}
@@ -890,4 +936,105 @@ func OriginHost(origin string) string {
 		return h
 	}
 	return strings.TrimSuffix(o, "/")
+}
+
+var (
+	headerNameRe = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+	httpMethodRe = regexp.MustCompile(`^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$`)
+)
+
+func isValidIPOrCIDR(s string) bool {
+	if s == "" || strings.ContainsAny(s, " \t\r\n;\"'{}$") {
+		return false
+	}
+	if strings.Contains(s, "/") {
+		_, err := netip.ParsePrefix(s)
+		return err == nil
+	}
+	_, err := netip.ParseAddr(s)
+	return err == nil
+}
+
+func isSafeNginxValue(v string) bool {
+	if len(v) > 512 {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		b := v[i]
+		if b < 0x20 || b == 0x7f {
+			return false
+		}
+	}
+	return !strings.ContainsAny(v, "\r\n;{}\"$\\")
+}
+
+func validateHeaders(c *checker, rid, rname, dir string, hdrs map[string]string, isHTTP bool) {
+	if len(hdrs) == 0 {
+		return
+	}
+	if !isHTTP {
+		c.err(rid, "route_headers_proto", "route %q: custom %s headers apply to HTTP routes only", rname, dir)
+		return
+	}
+	if len(hdrs) > 32 {
+		c.err(rid, "route_headers_limit", "route %q: at most 32 custom %s headers are allowed", rname, dir)
+	}
+	for k, v := range hdrs {
+		if !headerNameRe.MatchString(k) || len(k) > 64 {
+			c.err(rid, "route_header_name", "route %q: invalid %s header name %q", rname, dir, k)
+		}
+		if !isSafeNginxValue(v) {
+			c.err(rid, "route_header_value", "route %q: invalid %s header value for %q", rname, dir, k)
+		}
+	}
+}
+
+func validateCORS(c *checker, rid, rname string, cors *CORSPolicy) {
+	if len(cors.AllowOrigins) == 0 {
+		c.err(rid, "route_cors_origin", "route %q: CORS enabled without any allow_origins", rname)
+	}
+	for _, o := range cors.AllowOrigins {
+		if o == "*" {
+			if cors.AllowCredentials {
+				c.err(rid, "route_cors_cred_star", "route %q: CORS allow_credentials cannot be combined with wildcard origin *", rname)
+			}
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || !isSafeNginxValue(o) {
+			c.err(rid, "route_cors_origin", "route %q: invalid CORS origin %q", rname, o)
+		}
+	}
+	for _, m := range cors.AllowMethods {
+		if !httpMethodRe.MatchString(strings.ToUpper(m)) {
+			c.err(rid, "route_cors_method", "route %q: invalid CORS method %q", rname, m)
+		}
+	}
+	for _, h := range cors.AllowHeaders {
+		if !headerNameRe.MatchString(h) {
+			c.err(rid, "route_cors_header", "route %q: invalid CORS header %q", rname, h)
+		}
+	}
+	if cors.MaxAgeSec < 0 || cors.MaxAgeSec > 86400 {
+		c.err(rid, "route_cors_maxage", "route %q: CORS max_age_s must be 0–86400", rname)
+	}
+}
+
+// ValidateRealIP checks RealIPConfig for safety against Nginx directive injection.
+func ValidateRealIP(cfg RealIPConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if !headerNameRe.MatchString(cfg.Header) || len(cfg.Header) > 64 {
+		return fmt.Errorf("invalid real_ip header %q", cfg.Header)
+	}
+	if len(cfg.TrustedCIDRs) == 0 {
+		return fmt.Errorf("at least one trusted CIDR is required when real_ip is enabled")
+	}
+	for _, cidr := range cfg.TrustedCIDRs {
+		if !isValidIPOrCIDR(cidr) {
+			return fmt.Errorf("invalid trusted CIDR %q", cidr)
+		}
+	}
+	return nil
 }

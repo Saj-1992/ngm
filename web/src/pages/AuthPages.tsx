@@ -120,9 +120,11 @@ export function MfaVerifyPage() {
         <h1 className="mb-1 text-xl font-semibold text-fg">{t("mfa.verifyTitle")}</h1>
         <p className="mb-5 text-sm text-fg-muted">{t("mfa.verifyBody")}</p>
         <form onSubmit={submit} className="flex flex-col gap-4">
-          <Field label={t("mfa.code")}>{({ id }) => <OtpInput id={id} autoFocus value={code} onChange={setCode} />}</Field>
+          <Field label={t("mfa.code")} hint={t("mfa.recoveryUseHint")}>
+            {({ id, describedBy }) => <Input id={id} aria-describedby={describedBy} dir="ltr" autoFocus autoComplete="one-time-code" placeholder="123456 / XXXX-XXXX" value={code} onChange={(e) => setCode(e.target.value)} />}
+          </Field>
           <FormError>{error}</FormError>
-          <Button variant="primary" type="submit" disabled={busy || code.length !== 6}>
+          <Button variant="primary" type="submit" disabled={busy || code.trim().length < 6}>
             {t("mfa.verify")}
           </Button>
           <Button variant="ghost" type="button" onClick={async () => { await api.logout().catch(() => {}); await refresh(); }}>

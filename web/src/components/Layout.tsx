@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { navGroups } from "@/nav";
 import { Button, cn } from "./ui/primitives";
+import { Tip } from "./ui/tooltip";
 
 function Brand() {
   const { t } = useI18n();
@@ -74,10 +75,12 @@ function LiveIndicator({ status }: { status: LiveStatus }) {
     offline: { dot: "bg-bad", label: t("live.offline") },
   }[status];
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-xs text-fg-muted" role="status" aria-live="polite">
-      <span className={cn("size-2 rounded-full", map.dot)} aria-hidden />
-      <span className="sr-only sm:not-sr-only">{map.label}</span>
-    </span>
+    <Tip content={t("tip.live")}>
+      <span className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-xs text-fg-muted" role="status" aria-live="polite">
+        <span className={cn("size-2 rounded-full", map.dot)} aria-hidden />
+        <span className="sr-only sm:not-sr-only">{map.label}</span>
+      </span>
+    </Tip>
   );
 }
 
@@ -124,11 +127,13 @@ function LanguageMenu() {
   ];
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("topbar.language")}>
-          <Languages className="size-4" aria-hidden />
-        </Button>
-      </Dropdown.Trigger>
+      <Tip content={t("tip.lang")}>
+        <Dropdown.Trigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t("topbar.language")}>
+            <Languages className="size-4" aria-hidden />
+          </Button>
+        </Dropdown.Trigger>
+      </Tip>
       <Dropdown.Portal>
         <Dropdown.Content align="end" sideOffset={6} className={menuContent}>
           {opts.map((o) => (
@@ -154,11 +159,13 @@ function ThemeMenu() {
   const Current = opts.find((o) => o.v === pref)?.Icon ?? Monitor;
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("topbar.theme")}>
-          <Current className="size-4" aria-hidden />
-        </Button>
-      </Dropdown.Trigger>
+      <Tip content={t("tip.theme")}>
+        <Dropdown.Trigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t("topbar.theme")}>
+            <Current className="size-4" aria-hidden />
+          </Button>
+        </Dropdown.Trigger>
+      </Tip>
       <Dropdown.Portal>
         <Dropdown.Content align="end" sideOffset={6} className={menuContent}>
           {opts.map((o) => (

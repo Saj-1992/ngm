@@ -178,6 +178,8 @@ export const api = {
   audit: (p: { limit?: number; cursor?: string | null; action?: string; result?: string } = {}) =>
     request<Page<AuditEvent>>("/api/v1/audit" + q(p)),
   auditVerify: () => request<{ events: number; ok: boolean; broken_at_seq?: number; reason?: string }>("/api/v1/audit/verify"),
+  recoveryCodeStatus: () => request<{ remaining: number }>("/api/v1/auth/mfa/recovery-codes/status"),
+  regenerateRecoveryCodes: () => request<{ codes: string[] }>("/api/v1/auth/mfa/recovery-codes", { method: "POST" }),
 };
 
 // ─── Gateway (Phase 3) ─────────────────────────────────────────────────────
@@ -195,7 +197,14 @@ export type MatchField = "sni" | "alpn" | "host" | "path_prefix" | "path_exact";
 export type Match = { field: MatchField; operator: "exact" | "wildcard" | "prefix"; value: string };
 export type Protocol = "http" | "tcp" | "tls_passthrough" | "tls_terminate_http";
 export type DestKind = "pool" | "endpoint" | "redirect" | "reject" | "website";
-export type RouteOptions = { websocket?: boolean; preserve_host?: boolean; connect_timeout_ms?: number; read_timeout_ms?: number; send_timeout_ms?: number; client_max_body_mb?: number; redirect_url?: string; redirect_code?: number; stream_timeout_ms?: number; backend_proxy_protocol?: boolean };
+export type CORSPolicy = { enabled: boolean; allow_origins?: string[]; allow_methods?: string[]; allow_headers?: string[]; allow_credentials?: boolean; max_age_s?: number };
+export type RealIPConfig = { enabled: boolean; header: string; trusted_cidrs: string[]; recursive: boolean };
+export type RouteOptions = {
+  websocket?: boolean; preserve_host?: boolean; connect_timeout_ms?: number; read_timeout_ms?: number; send_timeout_ms?: number; client_max_body_mb?: number;
+  redirect_url?: string; redirect_code?: number; stream_timeout_ms?: number; backend_proxy_protocol?: boolean;
+  strip_prefix?: boolean; ip_allow?: string[]; ip_deny?: string[]; rate_limit_rps?: number; rate_limit_burst?: number;
+  gzip?: boolean; grpc?: boolean; request_headers?: Record<string, string>; response_headers?: Record<string, string>; cors?: CORSPolicy;
+};
 export type Route = {
   id: string; name: string; listener_id: string; protocol: Protocol; priority: number; destination_kind: DestKind; destination_id?: string;
   is_fallback: boolean; certificate_id?: string; matches: Match[]; options: RouteOptions; enabled: boolean; revision: number;
@@ -242,6 +251,9 @@ export const gw = {
     request<{ job_id: string; status: string }>("/api/v1/deployments/rollback", { method: "POST", body: { generation_id }, headers: { "Idempotency-Key": key } }),
   job: (id: string) => request<JobDetail>(`/api/v1/jobs/${id}`),
   jobSteps: (id: string) => request<{ items: JobStep[] }>(`/api/v1/jobs/${id}/steps`),
+  realIp: () => request<RealIPConfig>("/api/v1/gateway/real-ip"),
+  setRealIp: (b: RealIPConfig) => request<RealIPConfig>("/api/v1/gateway/real-ip", { method: "PUT", body: b }),
+  diff: () => request<{ valid: boolean; active_gen?: string; issues?: Issue[]; files: Record<string, { changed: boolean; diff: { op: "eq" | "add" | "del" | "info"; text: string }[] }> }>("/api/v1/gateway/diff"),
 };
 
 // ─── Operations (Phase 4) ──────────────────────────────────────────────────
@@ -250,7 +262,8 @@ export type EndpointHealth = { endpoint_id: string; status: "healthy" | "down" |
 export type FWRule = { id: string; key: string; action: "allow" | "deny" | "limit"; proto: "tcp" | "udp"; port: number; source: string; active_state: "present" | "absent" | "unknown"; revision: number; updated_at: string };
 export type FWObserved = { installed: boolean; active: boolean; defaults: string; owned: Record<string, string>; foreign: string[]; ssh_ports: number[]; ssh_peers: string[]; ssh_open: boolean };
 export type BackupManifest = { created: string; hostname: string; ngm_version: string; schema_version: number; counts: Record<string, number>; files: unknown[] };
-export type Backup = { id: string; file_name: string; size_bytes: number; sha256: string; status: string; trigger: string; created_by?: string; created_at: string; manifest: BackupManifest };
+export type Backup = { id: string; file_name: string; size_bytes: number; sha256: string; status: string; trigger: string; created_by?: string; created_at: string; manifest: BackupManifest; remote_status?: string; remote_key?: string; remote_error?: string };
+export type BackupRemoteConfig = { enabled: boolean; endpoint: string; region: string; bucket: string; prefix?: string; access_key: string; path_style: boolean; has_secret?: boolean };
 export type BackupSchedule = { enabled: boolean; interval_hours: number; retain: number };
 export type RecoveryAction = { code: string; command?: string };
 export type Incident = {
@@ -278,6 +291,10 @@ export const ops = {
     verify: (id: string) => request<{ ok: boolean; manifest: BackupManifest }>(`/api/v1/backups/${id}/verify`, { method: "POST" }),
     remove: (id: string) => request<void>(`/api/v1/backups/${id}`, { method: "DELETE" }),
     downloadUrl: (id: string) => apiUrl(`/api/v1/backups/${id}/download`),
+    remote: () => request<BackupRemoteConfig>("/api/v1/backups/remote"),
+    setRemote: (b: BackupRemoteConfig & { secret_key?: string }) => request<BackupRemoteConfig>("/api/v1/backups/remote", { method: "PUT", body: b }),
+    testRemote: () => request<{ ok: boolean }>("/api/v1/backups/remote/test", { method: "POST" }),
+    uploadRemote: (id: string) => request<{ ok: boolean; remote_key: string }>(`/api/v1/backups/${id}/upload`, { method: "POST" }),
   },
   recovery: {
     list: (open = false) => request<{ items: Incident[] }>("/api/v1/recovery/incidents" + (open ? "?status=open" : "")),
@@ -399,6 +416,12 @@ export const opsx = {
   savePerf: (b: { profile: string; overrides: Record<string, number> }) => request<{ view: PerfView }>("/api/v1/performance", { method: "PUT", body: b }),
   topology: (view: "desired" | "active") => request<{ nodes: TopoNode[]; edges: TopoEdge[]; truncated: boolean }>(`/api/v1/topology?view=${view}`),
   impact: (node: string, view: string) => request<{ node: string; affected: TopoNode[]; critical: string[] }>(`/api/v1/topology/impact?node=${encodeURIComponent(node)}&view=${view}`),
+  traffic: (hours = 24) => request<{
+    hours: number; total: number; s2xx: number; s3xx: number; s4xx: number; s5xx: number; avg_ms: number; p95_ms: number; index_ready: boolean;
+    buckets: { ts: number; total: number; s2xx: number; s3xx: number; s4xx: number; s5xx: number; avg_ms: number }[];
+    top_hosts: { key: string; count: number }[];
+    top_paths: { key: string; count: number }[];
+  }>(`/api/v1/monitoring/traffic?hours=${hours}`),
 };
 
 export type UpdateInfo = {

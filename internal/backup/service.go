@@ -47,15 +47,18 @@ type Schedule struct {
 
 // Artifact is a recorded archive.
 type Artifact struct {
-	ID        string    `json:"id"`
-	FileName  string    `json:"file_name"`
-	Size      int64     `json:"size_bytes"`
-	SHA256    string    `json:"sha256"`
-	Status    string    `json:"status"`
-	Trigger   string    `json:"trigger"`
-	CreatedBy string    `json:"created_by,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	Manifest  Manifest  `json:"manifest"`
+	ID           string    `json:"id"`
+	FileName     string    `json:"file_name"`
+	Size         int64     `json:"size_bytes"`
+	SHA256       string    `json:"sha256"`
+	Status       string    `json:"status"`
+	Trigger      string    `json:"trigger"`
+	CreatedBy    string    `json:"created_by,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	Manifest     Manifest  `json:"manifest"`
+	RemoteStatus string    `json:"remote_status,omitempty"`
+	RemoteKey    string    `json:"remote_key,omitempty"`
+	RemoteError  string    `json:"remote_error,omitempty"`
 }
 
 // Service manages archives on the local disk.
@@ -190,7 +193,18 @@ func (s *Service) CreateArchive(ctx context.Context, keysDir, hostname, trigger,
 	}
 	_, err = s.DB.ExecContext(ctx, `INSERT INTO backup_artifacts(id,file_name,size_bytes,sha256,manifest_json,status,trigger_kind,created_by,created_at) VALUES(?,?,?,?,?,'complete',?,?,?)`,
 		a.ID, name, a.Size, a.SHA256, string(mj), trigger, by, store.FormatTime(a.CreatedAt))
-	return a, err
+	if err != nil {
+		return a, err
+	}
+	if cfg, rerr := s.Remote(ctx); rerr == nil && cfg.Enabled {
+		if key, uerr := s.UploadRemote(ctx, a.ID, final, a.SHA256); uerr != nil {
+			s.recordRemoteFailure(ctx, a.ID, key, uerr)
+			a.RemoteStatus, a.RemoteKey, a.RemoteError = "failed", key, uerr.Error()
+		} else {
+			a.RemoteStatus, a.RemoteKey = "uploaded", key
+		}
+	}
+	return a, nil
 }
 
 // verifyFile decrypts the whole archive with key into a throwaway dir.
@@ -237,7 +251,7 @@ func (s *Service) Verify(ctx context.Context, id string) (*Manifest, error) {
 
 // List returns archives, newest first.
 func (s *Service) List(ctx context.Context) ([]Artifact, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,file_name,size_bytes,sha256,status,trigger_kind,COALESCE(created_by,''),created_at,manifest_json FROM backup_artifacts
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,file_name,size_bytes,sha256,status,trigger_kind,COALESCE(created_by,''),created_at,manifest_json,COALESCE(remote_status,''),COALESCE(remote_key,''),COALESCE(remote_error,'') FROM backup_artifacts
 		WHERE status='complete' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -247,7 +261,7 @@ func (s *Service) List(ctx context.Context) ([]Artifact, error) {
 	for rows.Next() {
 		var a Artifact
 		var c, m string
-		if err := rows.Scan(&a.ID, &a.FileName, &a.Size, &a.SHA256, &a.Status, &a.Trigger, &a.CreatedBy, &c, &m); err != nil {
+		if err := rows.Scan(&a.ID, &a.FileName, &a.Size, &a.SHA256, &a.Status, &a.Trigger, &a.CreatedBy, &c, &m, &a.RemoteStatus, &a.RemoteKey, &a.RemoteError); err != nil {
 			return nil, err
 		}
 		a.CreatedAt, _ = store.ParseTime(c)

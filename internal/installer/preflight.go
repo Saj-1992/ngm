@@ -101,10 +101,10 @@ func Preflight(ctx context.Context, o Options) *Report {
 		r.add("root", "fail", "installer must run as root (sudo)")
 	}
 	// OS / arch support matrix.
-	if osr["ID"] == "ubuntu" && (osr["VERSION_ID"] == "22.04" || osr["VERSION_ID"] == "24.04") {
+	if osr["ID"] == "ubuntu" && (osr["VERSION_ID"] == "22.04" || osr["VERSION_ID"] == "24.04" || osr["VERSION_ID"] == "26.04") {
 		r.add("os", "pass", "%s", r.OS)
 	} else {
-		r.add("os", "fail", "unsupported OS %q; supported: Ubuntu 22.04/24.04 LTS", r.OS)
+		r.add("os", "fail", "unsupported OS %q; supported: Ubuntu 22.04/24.04/26.04 LTS", r.OS)
 	}
 	if runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64" {
 		r.add("arch", "pass", "%s", runtime.GOARCH)

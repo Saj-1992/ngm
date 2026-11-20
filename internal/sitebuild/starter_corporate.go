@@ -63,6 +63,11 @@ func starterCorporate() *Content {
 			it("Energy and comfort", "انرژی و آسایش", "Insulation, shading and heating strategies that cut running costs.", "راهکارهای عایق، سایه‌بان و گرمایش که هزینهٔ بهره‌برداری را کم می‌کند."),
 			it("Renovation", "بازسازی", "Surveys, structural checks and phased renovation of existing villas.", "برداشت، کنترل سازه و بازسازی مرحله‌ای ویلاهای موجود."),
 		}},
+		{Type: "pricing", Heading: tr("Engagement models", "مدل‌های همکاری"), Items: []Item{
+			it("Plot Feasibility", "امکان‌سنجی زمین", "Fixed fee · Pre-purchase zoning, soil, slope, access and legal risk report within 5 business days.", "تعرفه ثابت · گزارش کاربری، خاک، شیب، دسترسی و ریسک حقوقی پیش از خرید ظرف ۵ روز کاری."),
+			it("Full Design & Permits", "طراحی کامل و اخذ مجوز", "Most popular · Concept, architectural/structural/MEP drawings, 3D renders and municipal approvals.", "پرمخاطب‌ترین · طرح اولیه، نقشه‌های معماری/سازه/تأسیسات، رندر سه‌بعدی و اخذ مجوزهای شهرداری."),
+			it("Turnkey Supervision", "نظارت جامع تا تحویل", "Monthly retainer · Contractor tender, weekly engineering visits, material sign-off and final handover.", "قرارداد ماهانه · مناقصه پیمانکاران، بازدید هفتگی مهندسی، تأیید مصالح و تحویل نهایی."),
+		}},
 		faq,
 	}}
 	projects := Page{Slug: "projects", Title: tr("Projects", "پروژه‌ها"), Description: tr("Selected villas designed and supervised by Noor Villa Advisory.", "ویلاهای منتخب طراحی و نظارت‌شده توسط مشاوران ویلای نور."), Blocks: []Block{
